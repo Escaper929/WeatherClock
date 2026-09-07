@@ -47,8 +47,13 @@ jobs:
           cp .pio/build/esp32c3/firmware.bin   web/firmware.bin
           cp .pio/build/esp32c3/bootloader.bin web/bootloader.bin
           cp .pio/build/esp32c3/partitions.bin web/partitions.bin
-          # boot_app0(bin) 2 级引导程序不在 .pio/build 里，需从 Arduino 框架 SDK 拷贝
-          cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32c3/bin/boot_app0.bin" web/boot_app0.bin
+          # boot_app0.bin(2级引导) 不在 .pio/build，路径随框架版本变化，用 find 全局定位
+          BOOT0=$(find "$HOME/.platformio" -name 'boot_app0.bin' 2>/dev/null | head -n1)
+          if [ -n "$BOOT0" ]; then
+            cp "$BOOT0" web/boot_app0.bin
+          else
+            echo "ERROR: boot_app0.bin not found in PlatformIO packages"; exit 1
+          fi
           echo "${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" > web/version.txt
 
       - uses: actions/configure-pages@v5
