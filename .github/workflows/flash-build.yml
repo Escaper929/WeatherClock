@@ -1,0 +1,62 @@
+# ============================================================================
+#  每次推送到 main 自动完成：
+#    1. 用 PlatformIO 编译 ESP32-C3 固件
+#    2. 把 4 个 bin 拷贝进 web/（供 esp-web-tools 浏览器一键刷写）
+#    3. 发布 web/ 到 GitHub Pages
+#  这样以后更新固件只需 git push，刷新安装页面即可拿到最新固件。
+#  前提：仓库 Settings -> Pages -> Source 选择 "GitHub Actions"
+# ============================================================================
+name: Build & Deploy Web Flasher
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install -q platformio
+
+      - name: Build ESP32-C3 firmware
+        run: pio run -e esp32c3
+
+      - name: Stage web assets
+        run: |
+          mkdir -p web
+          cp .pio/build/esp32c3/firmware.bin   web/firmware.bin
+          cp .pio/build/esp32c3/bootloader.bin web/bootloader.bin
+          cp .pio/build/esp32c3/partitions.bin web/partitions.bin
+          cp .pio/build/esp32c3/boot_app0.bin  web/boot_app0.bin
+          echo "${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" > web/version.txt
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+          name: github-pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

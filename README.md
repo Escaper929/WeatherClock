@@ -8,6 +8,19 @@
 - 网页配置门户：启动时未配置或按住 **BOOT 键** 上电，即可进入软 AP `WeatherClock-xx`，浏览器访问 `http://192.168.4.1` 填写 WiFi / API Key / 城市后保存重启
 - 断线自动重连、天气定时刷新（默认 15 分钟，可改）
 
+## 快速开始：浏览器一键刷固件（无需安装 PlatformIO）
+
+本仓库已配置 **GitHub Actions**：每次推送代码会自动编译 ESP32-C3 固件并发布到 GitHub Pages，因此你可以**只靠浏览器**刷入固件：
+
+> 🌐 **安装页**：`https://Escaper929.github.io/WeatherClock/`
+
+用法：
+1. 用 USB 线把 **ESP32-C3 Super Mini** 连到电脑（按 Ctrl 键用 Chrome/Edge/Firefox 打开安装页，**不支持 Safari/iOS**）。
+2. 点击“连接并烧录”→ 选择设备串口 → 等待烧录完成。
+3. 设备自动重启并进入配置门户（连 WiFi `WeatherClock-xx` → 打开 `192.168.4.1` → 填 WiFi / API Key / 城市）。
+
+> 首次部署：仓库 **Settings → Pages → Source 选 “GitHub Actions”**，并等一次 Actions 构建通过后，安装页才生效。
+
 ## 接线
 
 1.54″ ST7789 7 引脚模块 -> ESP32-C3 Super Mini（按丝印引脚）：
