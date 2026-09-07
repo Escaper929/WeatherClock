@@ -116,20 +116,43 @@ static void registerRoutes(WebServer& server, AppConfig& cfg, String ipText) {
 
 // ---- softAP 首次配置门户（阻塞） ----
 void portalEnter(const AppConfig& current) {
-  // 生成 AP SSID：WeatherClock-<MAC后2字节>
+  // 生成 AP SSID：WeatherClock-<MAC后4位>
   String mac = WiFi.macAddress();
-  String suffix = mac.length() >= 2 ? mac.substring(mac.length() - 2) : "01";
+  mac.replace(":", "");
+  String suffix = mac.length() >= 4 ? mac.substring(mac.length() - 4) : "0001";
   String apSsid = "WeatherClock-" + suffix;
 
+  // AP 模式：先断开 STA，再设 AP
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // 最大发射功率
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.disconnect(true);
+  delay(100);
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(apSsid.c_str(), nullptr, 1, 0, 1);
+  delay(50);
+
+  // 尝试开启 softAP（重试 3 次）
+  bool apOk = false;
+  for (int i = 0; i < 3 && !apOk; i++) {
+    apOk = WiFi.softAP(apSsid.c_str(), nullptr, 1, 0, 4);
+    Serial.printf("[portal] softAP try %d: %s\n", i + 1, apOk ? "OK" : "FAIL");
+    if (!apOk) delay(500);
+  }
+
+  if (!apOk) {
+    Serial.println("[portal] softAP 全部失败！重启...");
+    delay(2000);
+    ESP.restart();
+  }
+
+  IPAddress apIP = WiFi.softAPIP();
+  Serial.printf("[portal] AP: %s  IP: %s\n", apSsid.c_str(), apIP.toString().c_str());
+  Serial.println("[portal] 请在浏览器访问 http://192.168.4.1");
 
   WebServer server(80);
   AppConfig cfg = current;
-  String ipText = "AP: " + WiFi.softAPIP().toString();
+  String ipText = "AP: " + apIP.toString();
   registerRoutes(server, cfg, ipText);
   server.begin();
-  Serial.println("[portal] 配置门户已开启，请在浏览器访问 http://192.168.4.1");
   while (true) {
     server.handleClient();
     delay(10);
