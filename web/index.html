@@ -76,8 +76,8 @@
     </div>
   </div>
 
-  <script type="module"
-    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <!-- 自托管 esp-web-tools（不再依赖 unpkg CDN，避免国内访问失败） -->
+  <script type="module" src="./ewt/install-button.js?module"></script>
   <script>
     // 显示固件版本：尝试读取同目录 version.txt，不存在则略过
     fetch("version.txt")
