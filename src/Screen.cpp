@@ -22,7 +22,6 @@ class LGFX : public lgfx::LGFX_Device {
 public:
   lgfx::Panel_ST7789 _panel;
   lgfx::Bus_SPI      _bus;
-  lgfx::Light_PWM    _light;
 
   LGFX(void) {
     { auto cfg = _bus.config();
@@ -49,31 +48,34 @@ public:
       _panel.config(cfg);
       setPanel(&_panel);
     }
-    { auto cfg = _light.config();
-      cfg.pin_bl    = PIN_BL;
-      cfg.invert    = false;
-      cfg.freq      = 12000;
-      cfg.pwm_channel = 7;
-      _light.config(cfg);
-      setLight(&_light);
-    }
   }
 };
 static LGFX lcd;
+
+// 用 LEDC 手动控制背光（绕开 LovyanGFX 的 ILight 接口，C3 上更省事）
+static void backlightSetup() {
+#if (defined(PIN_BL) && PIN_BL >= 0)
+  ledcSetup(0, 12000, 8);
+  ledcAttachPin(PIN_BL, 0);
+  ledcWrite(0, SCREEN_BRIGHTNESS);
+#endif
+}
 
 static const char* WEEK[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
 
 bool screenInit() {
   lcd.init();
-  if (!lcd.display()) return false;
-  screenSetBrightness(SCREEN_BRIGHTNESS);
+  lcd.display();
+  backlightSetup();
   lcd.setRotation(0);
   lcd.fillScreen(COL_BG);
   return true;
 }
 
 void screenSetBrightness(uint8_t v) {
-  lcd.setBrightness(v);
+#if (defined(PIN_BL) && PIN_BL >= 0)
+  ledcWrite(0, v);
+#endif
 }
 
 static void clearWeatherPanel() {
