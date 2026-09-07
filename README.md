@@ -10,20 +10,20 @@
 
 ## 接线
 
-1.54″ ST7789 7 引脚模块 -> ESP32-C3 Super Mini：
+1.54″ ST7789 7 引脚模块 -> ESP32-C3 Super Mini（按丝印引脚）：
 
-| 屏模块 | ESP32-C3 |
-|---|---|
-| VCC | 3.3V |
-| GND | GND |
-| SCL (SCLK) | GPIO4 |
-| SDA (MOSI) | GPIO6 |
-| CS | GPIO10 |
-| DC | GPIO7 |
-| RES | GPIO8 |
-| BL (背光) | GPIO5 |
+| 屏模块 | ESP32-C3 | 板子丝印 |
+|---|---|---|
+| VCC | 3.3V | Pin 3 |
+| GND | GND | Pin 2 |
+| SCL (SCLK) | GPIO21 | Pin 16 |
+| SDA (MOSI) | GPIO20 | Pin 15 |
+| CS | GPIO6 | Pin 10 |
+| DC | GPIO7 | Pin 11 |
+| RST (RES) | GPIO10 | Pin 14 |
+| BL (背光) | GPIO5 | Pin 9 |
 
-> 引脚在 [include/BoardPins.h](include/BoardPins.h) 里统一定义，按实际接线改即可。若用 GPIO8 上电不启动，把 RES 接到其它空闲引脚。
+> 注意：GPIO8 是板载 LED、GPIO9 是 BOOT 按键，都不要接屏。接线定义集中在 [include/BoardPins.h](include/BoardPins.h)，如需调整改那一处即可。
 
 ## 准备工作
 
