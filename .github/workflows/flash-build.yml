@@ -1,9 +1,9 @@
 # ============================================================================
 #  每次推送到 main 自动完成：
 #    1. 用 PlatformIO 编译 ESP32-C3 固件
-#    2. 把 4 个 bin 拷贝进 web/（供 esp-web-tools 浏览器一键刷写）
-#    3. 发布 web/ 到 GitHub Pages
-#  这样以后更新固件只需 git push，刷新安装页面即可拿到最新固件。
+#    2. 把 4 个 bin 提交回 git 仓库（jsDelivr 镜像需要 bin 在仓库里，国内访问稳定）
+#    3. 用「含 bin 的最新 commit」替换 index.html 的 manifest 占位符并发布 GitHub Pages
+#  安装页：https://Escaper929.github.io/WeatherClock/
 #  前提：仓库 Settings -> Pages -> Source 选择 "GitHub Actions"
 # ============================================================================
 name: Build & Deploy Web Flasher
@@ -25,9 +25,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,8 +52,6 @@ jobs:
             echo "ERROR: boot_app0.bin not found in PlatformIO packages"; exit 1
           fi
           echo "${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" > web/version.txt
-          # 将 jsDelivr manifest 占位符替换为当前 commit（仅影响部署产物，不回写仓库）
-          sed -i "s/__MANIFEST_SHA__/${{ github.sha }}/g" web/index.html
 
       # 把固件 bin 提交回仓库，jsDelivr 镜像才能代理到（国内访问稳定）
       - name: Commit firmware binaries to repo
@@ -71,6 +66,22 @@ jobs:
             git push
             echo "Pushed firmware binaries for jsDelivr mirror"
           fi
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 此时 HEAD 就是「含最新 bin 的 commit」，用它作为 jsDelivr 版本，保证 bin 不 404
+      - name: Replace manifest SHA and stage
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "jsDelivr manifest sha: $SHA"
+          sed -i "s/__MANIFEST_SHA__/$SHA/g" web/index.html
 
       - uses: actions/configure-pages@v5
 
