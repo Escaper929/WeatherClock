@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -55,6 +55,22 @@ jobs:
             echo "ERROR: boot_app0.bin not found in PlatformIO packages"; exit 1
           fi
           echo "${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" > web/version.txt
+          # 将 jsDelivr manifest 占位符替换为当前 commit（仅影响部署产物，不回写仓库）
+          sed -i "s/__MANIFEST_SHA__/${{ github.sha }}/g" web/index.html
+
+      # 把固件 bin 提交回仓库，jsDelivr 镜像才能代理到（国内访问稳定）
+      - name: Commit firmware binaries to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/firmware.bin web/bootloader.bin web/partitions.bin web/boot_app0.bin web/version.txt
+          if git diff --cached --quiet; then
+            echo "No firmware changes to commit"
+          else
+            git commit -m "chore: update firmware binaries [skip ci]"
+            git push
+            echo "Pushed firmware binaries for jsDelivr mirror"
+          fi
 
       - uses: actions/configure-pages@v5
 

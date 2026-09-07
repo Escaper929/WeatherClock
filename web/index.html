@@ -50,7 +50,8 @@
         <li>等待烧录完成，设备会自动重启并进入<b>配置门户</b>。</li>
       </ol>
       <div class="hit flash-colors">
-        <esp-web-install-button manifest="manifest.json">
+        <!-- manifest 走 jsDelivr 镜像（国内稳定）；__MANIFEST_SHA__ 由 CI 替换为 commit，防止 CDN 缓存旧固件 -->
+        <esp-web-install-button manifest="https://cdn.jsdelivr.net/gh/Escaper929/WeatherClock@__MANIFEST_SHA__/web/manifest.json">
           <button slot="activate">⚡ 连接并烧录 WeatherClock</button>
           <i slot="unsupported">当前浏览器不支持 WebSerial，请改用 Chrome / Edge 打开本页。</i>
         </esp-web-install-button>
