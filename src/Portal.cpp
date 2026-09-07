@@ -122,21 +122,20 @@ void portalEnter(const AppConfig& current) {
   String suffix = mac.length() >= 4 ? mac.substring(mac.length() - 4) : "0001";
   String apSsid = "WeatherClock-" + suffix;
 
-  // AP 模式：先断开 STA，再设 AP
-  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // 最大发射功率
-  WiFi.mode(WIFI_AP_STA);
-  WiFi.disconnect(true);
-  delay(100);
+  // C3 SuperMini WiFi 初始化：关闭持久化、关闭省电、用信道 11
+  WiFi.persistent(false);
+  WiFi.setSleep(false);
   WiFi.mode(WIFI_AP);
-  delay(50);
+  delay(100);
 
   // 尝试开启 softAP（重试 3 次）
   bool apOk = false;
   for (int i = 0; i < 3 && !apOk; i++) {
-    apOk = WiFi.softAP(apSsid.c_str(), nullptr, 1, 0, 4);
+    apOk = WiFi.softAP(apSsid.c_str(), nullptr, 11, 0, 4);
     Serial.printf("[portal] softAP try %d: %s\n", i + 1, apOk ? "OK" : "FAIL");
     if (!apOk) delay(500);
   }
+  delay(200);  // 给 RF 校准时间
 
   if (!apOk) {
     Serial.println("[portal] softAP 全部失败！重启...");
