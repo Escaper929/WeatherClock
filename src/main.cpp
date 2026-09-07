@@ -12,6 +12,7 @@
 #include "Screen.h"
 #include "Portal.h"
 #include <Arduino.h>
+#include <WiFi.h>
 
 static AppConfig  cfg;
 static WeatherData weather;
@@ -62,6 +63,11 @@ void setup() {
   Serial.printf("[wifi] SSID=%s\n", cfg.wifi_ssid.c_str());
   if (!wifiConnect(cfg.wifi_ssid, cfg.wifi_pass, 20000)) {
     Serial.println("[wifi] 连接失败，稍后重试");
+  } else {
+    // 启动常驻配置页：可通过 http://<设备IP> 或 http://weatherclock.local 访问
+    portalServerBegin(cfg);
+    renderStatus("Ready", "http://" + WiFi.localIP().toString());
+    delay(2500);
   }
 
   // NTP 时间
@@ -125,6 +131,9 @@ void loop() {
       }
     }
   }
+
+  // 4. 常驻配置页轮询
+  portalServerLoop();
 
   delay(20);
 }

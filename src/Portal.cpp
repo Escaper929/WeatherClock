@@ -1,13 +1,21 @@
 // ============================================================================
-//  Portal.cpp - 网页配置门户实现
+//  Portal.cpp - 网页配置实现
+//  两种模式共用同一套页面与 /save 处理：
+//   - portalEnter():        softAP 门户（首次/按住 BOOT），访问 http://192.168.4.1
+//   - portalServerBegin():  STA 常驻配置页，访问 http://<设备IP> / weatherclock.local
 // ============================================================================
 #include "Portal.h"
 #include "BoardPins.h"
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ESPmDNS.h>
 #include <time.h>
 
-// 生成 web 页面（单独函数便于读取）
+// 常驻配置服务器（STA 模式）
+static WebServer* gServer = nullptr;
+static AppConfig  gCfg;
+
+// 生成 web 页面（$IP$ 占位替换为当前访问地址）
 static const char PAGE_HTML[] PROGMEM =
 "<!DOCTYPE html><html lang='zh'><head>"
 "<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -22,7 +30,7 @@ static const char PAGE_HTML[] PROGMEM =
 "background:#2b8;color:#042;font-size:15px;font-weight:bold;cursor:pointer}"
 ".tip{font-size:12px;color:#89b;margin-top:8px;line-height:1.5}"
 "small{color:#89b}</style></head><body><div class='card'>"
-"<h1>☀ 天气时钟 配置</h1><small>AP: $APSSID$ · IP 192.168.4.1</small>"
+"<h1>☀ 天气时钟 配置</h1><small>$IP$</small>"
 "<form method='post' action='/save'>"
 "<label>WiFi 名称 (SSID)</label>"
 "<input name='s' value='$S$' placeholder='例如 MyWiFi'>"
@@ -39,13 +47,13 @@ static const char PAGE_HTML[] PROGMEM =
 "</form></div></body></html>";
 
 // 页面变量替换
-static String renderPage(const AppConfig& cfg, const char* apSsid) {
+static String renderPage(const AppConfig& cfg, const String& ipText) {
   String s = FPSTR(PAGE_HTML);
   String latlon;
   if (cfg.lat != 0 || cfg.lon != 0) {
     latlon = String(cfg.lon, 2) + "," + String(cfg.lat, 2);
   }
-  s.replace("$APSSID$", apSsid);
+  s.replace("$IP$", ipText);
   s.replace("$S$", cfg.wifi_ssid);
   s.replace("$K$", cfg.qweather_key);
   s.replace("$C$", cfg.city_name);
@@ -53,6 +61,60 @@ static String renderPage(const AppConfig& cfg, const char* apSsid) {
   return s;
 }
 
+// /save 处理（两种模式共用）
+static void handleSave(WebServer& server, AppConfig& cfg) {
+  cfg.valid = true;
+  cfg.wifi_ssid    = server.arg("s");
+  cfg.wifi_pass    = server.arg("p");
+  cfg.qweather_key = server.arg("k");
+  cfg.city_name    = server.arg("c");
+  // 解析经纬度（若填写）
+  String g = server.arg("g");
+  g.trim();
+  if (g.length() > 0) {
+    int comma = g.indexOf(',');
+    if (comma > 0) {
+      cfg.lon = g.substring(0, comma).toFloat();
+      cfg.lat = g.substring(comma + 1).toFloat();
+    }
+  }
+  // 城市名和经纬度都留空则无法定位
+  bool ok = cfg.qweather_key.length() > 0 &&
+            cfg.city_name.length() > 0 &&
+            cfg.wifi_ssid.length() > 0;
+  String html;
+  if (!ok) {
+    html = F("<html><body style='background:#0b1022;color:#eee;font-family:sans-serif;"
+             "text-align:center;padding-top:60px'><h2>❌ 信息不完整</h2>"
+             "<p>SSID、API Key 与城市至少需要填写。</p>"
+             "<p><a href='/' style='color:#7ff'>返回</a></p></body></html>");
+    server.send(200, "text/html; charset=utf-8", html);
+    return;
+  }
+  saveConfig(cfg);   // location_id 等到连上 WiFi 后再解析
+  html = F("<html><body style='background:#0b1022;color:#eee;font-family:sans-serif;"
+           "text-align:center;padding-top:60px'><h2>✔ 已保存</h2>"
+           "<p>设备即将重启并连接 WiFi…</p></body></html>");
+  server.send(200, "text/html; charset=utf-8", html);
+  delay(600);
+  ESP.restart();
+}
+
+// 注册路由（两种模式共用）；ipText 按值传入并捕获，避免悬垂引用
+static void registerRoutes(WebServer& server, AppConfig& cfg, String ipText) {
+  server.on("/", HTTP_GET, [&, ipText]() {
+    server.send(200, "text/html; charset=utf-8", renderPage(cfg, ipText));
+  });
+  server.on("/save", HTTP_POST, [&]() {
+    handleSave(server, cfg);
+  });
+  server.onNotFound([&]() {
+    server.sendHeader("Location", "/", true);
+    server.send(302, "text/html", "");
+  });
+}
+
+// ---- softAP 首次配置门户（阻塞） ----
 void portalEnter(const AppConfig& current) {
   // 生成 AP SSID：WeatherClock-<MAC后2字节>
   String mac = WiFi.macAddress();
@@ -64,58 +126,32 @@ void portalEnter(const AppConfig& current) {
 
   WebServer server(80);
   AppConfig cfg = current;
-
-  server.on("/", HTTP_GET, [&]() {
-    server.send(200, "text/html; charset=utf-8", renderPage(cfg, apSsid.c_str()));
-  });
-
-  server.on("/save", HTTP_POST, [&]() {
-    cfg.valid = true;
-    cfg.wifi_ssid    = server.arg("s");
-    cfg.wifi_pass    = server.arg("p");
-    cfg.qweather_key = server.arg("k");
-    cfg.city_name    = server.arg("c");
-    // 解析经纬度（若填写）
-    String g = server.arg("g");
-    g.trim();
-    if (g.length() > 0) {
-      int comma = g.indexOf(',');
-      if (comma > 0) {
-        cfg.lon = g.substring(0, comma).toFloat();
-        cfg.lat = g.substring(comma + 1).toFloat();
-      }
-    }
-    // 城市名和经纬度都留空则无法定位
-    bool ok = cfg.qweather_key.length() > 0 &&
-              cfg.city_name.length() > 0 &&
-              cfg.wifi_ssid.length() > 0;
-    String html;
-    if (!ok) {
-      html = F("<html><body style='background:#0b1022;color:#eee;font-family:sans-serif;"
-               "text-align:center;padding-top:60px'><h2>❌ 信息不完整</h2>"
-               "<p>SSID、API Key 与城市至少需要填写。</p>"
-               "<p><a href='/' style='color:#7ff'>返回</a></p></body></html>");
-      server.send(200, "text/html; charset=utf-8", html);
-      return;
-    }
-    saveConfig(cfg);   // location_id 等到连上 WiFi 后再解析
-    html = F("<html><body style='background:#0b1022;color:#eee;font-family:sans-serif;"
-             "text-align:center;padding-top:60px'><h2>✔ 已保存</h2>"
-             "<p>设备即将重启并连接 WiFi…</p></body></html>");
-    server.send(200, "text/html; charset=utf-8", html);
-    delay(600);
-    ESP.restart();
-  });
-
-  server.onNotFound([&]() {
-    server.sendHeader("Location", "/", true);
-    server.send(302, "text/html", "");
-  });
-
+  String ipText = "AP: " + WiFi.softAPIP().toString();
+  registerRoutes(server, cfg, ipText);
   server.begin();
   Serial.println("[portal] 配置门户已开启，请在浏览器访问 http://192.168.4.1");
   while (true) {
     server.handleClient();
     delay(10);
   }
+}
+
+// ---- STA 常驻配置服务器（非阻塞） ----
+void portalServerBegin(const AppConfig& current) {
+  gCfg = current;
+  if (gServer) delete gServer;
+  gServer = new WebServer(80);
+  String ip = WiFi.localIP().toString();
+  String ipText = "STA: " + ip + " · 修改配置保存后自动重启";
+  registerRoutes(*gServer, gCfg, ipText);
+  gServer->begin();
+  Serial.printf("[portal] 配置页: http://%s\n", ip.c_str());
+  if (MDNS.begin("weatherclock")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("[portal] mDNS 配置页: http://weatherclock.local");
+  }
+}
+
+void portalServerLoop() {
+  if (gServer) gServer->handleClient();
 }

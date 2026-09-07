@@ -5,7 +5,7 @@
 **功能**
 - 时间 + 日期 + 星期（NTP 同步，北京时间 UTC+8）
 - 当前天气：温度、天气图标、英文天气名、湿度（数据来自 [和风天气 QWeather](https://dev.qweather.com)，免费版）
-- 网页配置门户：启动时未配置或按住 **BOOT 键** 上电，即可进入软 AP `WeatherClock-xx`，浏览器访问 `http://192.168.4.1` 填写 WiFi / API Key / 城市后保存重启
+- 网页配置：设备连接 WiFi 后获得局域网 IP，开机时屏幕会显示，浏览器访问 `http://<设备IP>`（或 mDNS `http://weatherclock.local`）即可随时修改配置；首次烧录未配置时或按住 **BOOT 键** 上电，则进入软 AP `WeatherClock-xx`，访问 `http://192.168.4.1` 配置
 - 断线自动重连、天气定时刷新（默认 15 分钟，可改）
 
 ## 快速开始：浏览器一键刷固件（无需安装 PlatformIO）
@@ -59,10 +59,10 @@ pio device monitor -b 115200
 ## 使用流程
 
 1. 首次上电（未配置）会自动进入配置门户。
-   以后想改配置：**按住 BOOT 键再上电**。
 2. 手机/电脑连接 WiFi `WeatherClock-xx`，浏览器打开 `http://192.168.4.1`。
 3. 填写 WiFi、API Key、城市名（如 `北京`，或直接填经纬度），点“保存并重启”。
 4. 设备连接 WiFi、同步时间、拉取天气，进入主界面。
+5. **以后想改配置**：直接用浏览器访问 `http://<设备IP>`（开机时屏幕会显示 IP，或输入 `http://weatherclock.local`）；按住 BOOT 键上电也可进入软 AP 门户。
 
 ## 目录结构
 
