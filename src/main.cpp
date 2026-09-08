@@ -92,6 +92,61 @@ static void onImprovConnected(const char* ssid, const char* password) {
   renderStatus("WiFi Connected", "http://" + WiFi.localIP().toString());
 }
 
+// ---- WiFi 诊断：记录最近一次断开原因（用于屏幕显示） ----
+static volatile int gLastWifiReason = -1;
+static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+  if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+    gLastWifiReason = info.wifi_sta_disconnected.reason;
+    Serial.printf("[wifi] disconnected reason=%d\n", gLastWifiReason);
+  }
+}
+
+// 自定义连接（替代库默认实现）：放宽安全级别 + 打印目标 AP 信息与状态迁移
+static bool customConnect(const char* ssid, const char* pass) {
+  WiFi.setSleep(false);
+  // 新版 arduino-esp32 默认最低 WPA2，遇到 WPA/WPA2+WPA3 混合路由器会连接失败
+  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);
+
+  if (WiFi.status() == WL_CONNECTED) { WiFi.disconnect(); delay(100); }
+
+  // 扫描目标 AP：确认可见性与认证方式（浏览器占串口时同步显示到屏幕）
+  renderStatus("Scanning...");
+  int n = WiFi.scanNetworks(false, true, 0, 300, ssid);
+  int targetRssi = 0, targetAuth = -1;
+  for (int i = 0; i < n; i++) {
+    if (WiFi.SSID(i) == ssid) { targetRssi = WiFi.RSSI(i); targetAuth = WiFi.encryptionType(i); }
+  }
+  WiFi.scanDelete();
+  Serial.printf("[improv] target %s: rssi=%d auth=%d\n", ssid, targetRssi, targetAuth);
+
+  gLastWifiReason = -1;
+  renderStatus("Connecting WiFi...", String(ssid) + " rssi=" + targetRssi);
+  WiFi.begin(ssid, pass);
+  unsigned start = millis();
+  wl_status_t st = WiFi.status(), last = WL_IDLE_STATUS;
+  while ((st = WiFi.status()) != WL_CONNECTED && millis() - start < 25000) {
+    if (st != last) {
+      last = st;
+      Serial.printf("[wifi] status=%d\n", st);
+    }
+    delay(250);
+  }
+
+  if (st != WL_CONNECTED) {
+    WiFi.disconnect();
+    // 浏览器占着串口看不到日志，把原因码直接显示到屏幕上
+    char sub[40];
+    snprintf(sub, sizeof sub, "r=%d auth=%d", gLastWifiReason, targetAuth);
+    renderStatus("WiFi failed", sub);
+    Serial.printf("[improv] connect failed: status=%d reason=%d\n", st, gLastWifiReason);
+    delay(4000);
+    renderStatus("USB Setup", "Flash page sets WiFi");
+    return false;
+  }
+  Serial.println("[improv] connected!");
+  return true;
+}
+
 // Improv CURRENT_STATE 状态包广播。
 // esp-web-tools 烧录完只发一次 GET_CURRENT_STATE 探测；若该帧在设备启动期间到达
 // 会被丢弃，客户端将停在 STOPPED（界面显示 "Wi-Fi turned off"）。
@@ -115,6 +170,8 @@ void setup() {
                              "WeatherClock", "1.0.0", "WeatherClock",
                              "http://{LOCAL_IPV4}");
   improvSerial.onImprovConnected(onImprovConnected);
+  improvSerial.setCustomConnectWiFi(customConnect);
+  WiFi.onEvent(onWiFiEvent);
 
   pinMode(PIN_BOOT_BTN, INPUT_PULLUP);
 
