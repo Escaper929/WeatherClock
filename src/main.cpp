@@ -10,6 +10,7 @@
 #include "AppConfig.h"
 #include "WiFiTime.h"
 #include "Weather.h"
+#include "Quote.h"
 #include "Screen.h"
 #include "Portal.h"
 #include <Arduino.h>
@@ -20,6 +21,10 @@ static AppConfig   cfg;
 static WeatherData weather;
 static bool        weatherValid = false;
 static unsigned    lastFetch    = 0;
+static QuoteData   quote;
+static bool        quoteValid   = false;
+static unsigned    lastQuote    = 0;
+static const unsigned long QUOTE_INTERVAL_MS = 10UL * 60 * 1000;  // 行情 10 分钟刷新
 static unsigned    lastBlink    = 0;
 static bool        blinkOn      = true;
 static unsigned    lastReconnect= 0;
@@ -45,25 +50,37 @@ static void fetchWeatherSafe() {
   lastFetch = millis();
 }
 
+static void fetchQuoteSafe() {
+  if (cfg.quote_mode <= 0) { lastQuote = millis(); return; }
+  QuoteData q;
+  if (fetchQuote(cfg, q)) {
+    quote = q;
+    quoteValid = true;
+    renderQuote(quote);
+  }
+  lastQuote = millis();
+}
+
 // 联网后的一次性初始化：NTP 等待 -> 城市解析 -> 首次天气
 static void postConnectInit() {
   if (postInitDone) return;
   postInitDone = true;
 
   // NTP 时间（最多等 20s）
-  ntpBegin();
+  ntpBegin(cfg.timezone);
   unsigned t0 = millis();
   while (!timeIsSynced() && (millis() - t0 < 20000)) {
     renderStatus("Syncing time...");
     wifiReconnect(cfg.wifi_ssid, cfg.wifi_pass);
     delay(200);
   }
+  Serial.printf("[ntp] synced=%d (%lus)\n", timeIsSynced(), (millis() - t0) / 1000);
 
   // 城市 -> LocationID（仅当未填经纬度且未解析过时）
   if (cfg.location_id.length() == 0 && cfg.city_name.length() > 0 &&
       (cfg.lat == 0 && cfg.lon == 0)) {
     String id;
-    if (geoResolveCity(cfg.qweather_key, cfg.city_name, id)) {
+    if (geoResolveCity(cfg.qweather_key, cfg.qweather_host, cfg.city_name, id)) {
       cfg.location_id = id;
       saveLocationId(id);
       Serial.printf("[geo] city=%s -> id=%s\n", cfg.city_name.c_str(), id.c_str());
@@ -72,8 +89,12 @@ static void postConnectInit() {
     }
   }
 
+  renderStatus("Loading weather...");
+  Serial.printf("[geo] use host='%s' city=%s\n", cfg.qweather_host.c_str(), cfg.city_name.c_str());
   fetchWeatherSafe();
+  if (weatherValid) renderWeather(weather);  // 开机即显示天气，不必等下一个拉取周期
   renderClock(nowSegments(), true);
+  fetchQuoteSafe();   // 行情首拉（成功后 renderQuote 自行绘制）
 }
 
 // Improv 配网成功回调（此时 WiFi 已由库连接成功）
@@ -191,6 +212,7 @@ void setup() {
   }
 
   bool hasWifi = loadConfig(cfg);
+  screenSetCity(cfg.city_name);   // 顶部显示城市名
 
   // 按住 BOOT 上电 -> softAP 门户兜底（阻塞）
   if (digitalRead(PIN_BOOT_BTN) == LOW) {
@@ -252,9 +274,12 @@ void loop() {
   if (!normalMode) { delay(10); return; }
 
   // 联网后的一次性初始化（NTP/城市/首拉天气）
-  if (!postInitDone) postConnectInit();
+  if (!postInitDone) {
+    postConnectInit();
+    now = millis();  // 初始化耗时数秒，刷新时间基准，避免 now-lastFetch 无符号下溢导致立即重拉
+  }
 
-  // 1. 时钟：每 500ms 切换冒号
+  // 1. 时钟：每 500ms 切换冒号（擦除-重绘策略，不再 fillScreen）
   if (now - lastBlink >= 500) {
     lastBlink = now;
     blinkOn = !blinkOn;
@@ -269,12 +294,17 @@ void loop() {
     }
   }
 
+  // 2b. 行情：每 10 分钟拉取
+  if (now - lastQuote >= QUOTE_INTERVAL_MS) {
+    if (wifiIsConnected()) fetchQuoteSafe();
+  }
+
   // 3. WiFi 保活
   if (!wifiIsConnected()) {
     if (now - lastReconnect >= 5000) {
       lastReconnect = now;
       if (wifiReconnect(cfg.wifi_ssid, cfg.wifi_pass)) {
-        ntpBegin();
+        ntpBegin(cfg.timezone);
         Serial.println("[wifi] reconnected");
       }
     }

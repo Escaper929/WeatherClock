@@ -17,11 +17,16 @@ struct WeatherData {
 };
 
 // 通过城市名解析 LocationID（用于配置门户保存时校验城市是否存在）
+// apiHost 为新版和风专属 API Host（留空走旧域名 geoapi）
 // 成功返回 true 并回填 id；失败返回 false
-bool geoResolveCity(const String& apikey, const String& cityName, String& outId);
+bool geoResolveCity(const String& apikey, const String& apiHost, const String& cityName, String& outId);
 
 // 拉取当前天气。地理位置：优先拿 cfg.lat/lon 非 0 则用经纬度，否则用 location_id。
 bool fetchWeather(const AppConfig& cfg, WeatherData& out);
 
 // 天气图标代码 -> 简短英文描述（用于不带中文字库时显示）
 const char* weatherTextShort(int iconCode);
+
+// 通用 HTTPS GET（独立 16KB 栈任务，内含 gzip 解压），供天气/行情模块共用
+// extraHeader：完整的额外请求头行（如 "X-QW-Api-Key: xxx"），空串则不发
+bool httpsGetRaw(const char* host, const String& path, const String& extraHeader, String& out);

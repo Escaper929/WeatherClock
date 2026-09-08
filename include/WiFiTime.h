@@ -14,7 +14,8 @@ bool wifiIsConnected();
 bool wifiReconnect(const String& ssid, const String& pass);
 
 // 启动 NTP 时间同步（异步，需要等待一小段时间后再取时间）
-void ntpBegin();
+// tz: POSIX 时区串（如 "CST-8"）；留空使用 BoardPins 的静态偏移
+void ntpBegin(const String& tz = String());
 
 // 返回已同步的时间戳（秒，北京时间已做偏移）；未同步返回 0
 unsigned long nowSegments();

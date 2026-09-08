@@ -10,9 +10,17 @@ struct AppConfig {
   String wifi_ssid;
   String wifi_pass;
   String qweather_key;          // 和风天气 API Key（免费版 devapi）
+  String qweather_host;         // 和风 API Host（2024 后新账号必需，如 abc123.re.qweatherapi.com；旧账号留空）
   String city_name;             // 城市名，如 "北京"（用于 geoapi 解析）
   String location_id;           // 解析后的 LocationID，如 "101010100"
   float  lat = 0, lon = 0;      // 可选经纬度（若留空用 location_id）
+  String timezone;              // POSIX 时区串，如 "CST-8"（北京）；留空用 BoardPins 的静态偏移
+
+  // ---- 行情显示（金价/油价/自定义数据源） ----
+  int    quote_mode = 0;        // 0=关闭 1=积存金/金价(Au9999) 2=布伦特原油 3=自定义 URL
+  String quote_label;           // 自定义时的显示标签（预设忽略，用内置名）
+  String quote_url;             // 自定义数据源完整 URL（https://...）
+  String quote_path;            // 自定义 JSON 价格字段路径，如 data.f43 或 price
 };
 
 // 载入配置，返回是否有效
