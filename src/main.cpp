@@ -111,7 +111,7 @@ static bool customConnect(const char* ssid, const char* pass) {
 
   // 扫描目标 AP：确认可见性与认证方式（浏览器占串口时同步显示到屏幕）
   renderStatus("Scanning...");
-  int n = WiFi.scanNetworks(false, true, 0, 300, ssid);
+  int n = WiFi.scanNetworks(false, true, false, 300, 0, ssid);
   int targetRssi = 0, targetAuth = -1;
   for (int i = 0; i < n; i++) {
     if (WiFi.SSID(i) == ssid) { targetRssi = WiFi.RSSI(i); targetAuth = WiFi.encryptionType(i); }
