@@ -17,8 +17,8 @@ bool loadConfig(AppConfig& cfg) {
   cfg = AppConfig();
   if (!prefs.begin(NS, true)) return false;   // RO mode
 
-  String valid = prefsGet("valid");
-  cfg.valid = (valid == "1") && (prefsGet("wifi_ssid").length() > 0);
+  // 只要保存过 WiFi SSID 即视为已配置（API Key/城市可在网页上补填）
+  cfg.valid = (prefsGet("wifi_ssid").length() > 0);
 
   cfg.wifi_ssid  = prefsGet("wifi_ssid");
   cfg.wifi_pass  = prefsGet("wifi_pass");

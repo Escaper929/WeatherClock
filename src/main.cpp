@@ -1,9 +1,10 @@
 // ============================================================================
 //  main.cpp - 天气时钟主程序
-//  流程：
-//    setup:  初始化屏幕 -> 读取配置 -> 若未配置或按住 BOOT 上电则进配置门户
-//            -> 连接 WiFi -> 同步 NTP 时间 -> 解析城市 -> 拉取天气
-//    loop:   刷新时钟、定期拉取天气、断线重连
+//  首次配置（与 BambuHelper 一致）：
+//    USB 连接设备 -> 浏览器烧录页通过 Improv WiFi 协议直接下发 WiFi 账号密码
+//    -> 设备加入局域网 -> 浏览器自动跳转 http://<设备IP> 补填 API Key / 城市
+//    （按住 BOOT 上电仍可进入 softAP 门户作为兜底）
+//  正常运行：NTP 对时 -> 定时拉取天气 -> 屏幕显示时钟与天气
 // ============================================================================
 #include "BoardPins.h"
 #include "AppConfig.h"
@@ -13,24 +14,82 @@
 #include "Portal.h"
 #include <Arduino.h>
 #include <WiFi.h>
+#include <ImprovWiFiLibrary.h>
 
-static AppConfig  cfg;
+static AppConfig   cfg;
 static WeatherData weather;
-static bool       weatherValid = false;
-static unsigned   lastFetch    = 0;
-static unsigned   lastBlink    = 0;
-static bool       blinkOn      = true;
-static unsigned   lastReconnect= 0;
+static bool        weatherValid = false;
+static unsigned    lastFetch    = 0;
+static unsigned    lastBlink    = 0;
+static bool        blinkOn      = true;
+static unsigned    lastReconnect= 0;
+
+// Improv WiFi（USB 串口配网，与浏览器 esp-web-tools 配合）
+static ImprovWiFi improvSerial(&Serial);
+
+// 状态机：provisionMode = 等待 USB 配网；normalMode = 已联网运行
+static bool provisionMode   = false;
+static bool normalMode      = false;
+static bool postInitDone    = false;  // 联网后的一次性初始化（城市解析/首次天气）
 
 static void fetchWeatherSafe() {
+  if (cfg.qweather_key.length() == 0) {  // 还没在网页填 API Key，跳过
+    lastFetch = millis();
+    return;
+  }
   WeatherData w;
   if (fetchWeather(cfg, w)) {
     weather = w;
     weatherValid = true;
-  } else if (!cfg.location_id.length() && cfg.city_name.length()) {
-    Serial.println("[weather] 定位失败，尝试按经纬度或重新解析城市");
   }
   lastFetch = millis();
+}
+
+// 联网后的一次性初始化：NTP 等待 -> 城市解析 -> 首次天气
+static void postConnectInit() {
+  if (postInitDone) return;
+  postInitDone = true;
+
+  // NTP 时间（最多等 20s）
+  ntpBegin();
+  unsigned t0 = millis();
+  while (!timeIsSynced() && (millis() - t0 < 20000)) {
+    renderStatus("Syncing time...");
+    wifiReconnect(cfg.wifi_ssid, cfg.wifi_pass);
+    delay(200);
+  }
+
+  // 城市 -> LocationID（仅当未填经纬度且未解析过时）
+  if (cfg.location_id.length() == 0 && cfg.city_name.length() > 0 &&
+      (cfg.lat == 0 && cfg.lon == 0)) {
+    String id;
+    if (geoResolveCity(cfg.qweather_key, cfg.city_name, id)) {
+      cfg.location_id = id;
+      saveLocationId(id);
+      Serial.printf("[geo] city=%s -> id=%s\n", cfg.city_name.c_str(), id.c_str());
+    } else {
+      Serial.println("[geo] city resolve failed");
+    }
+  }
+
+  fetchWeatherSafe();
+  renderClock(nowSegments(), true);
+}
+
+// Improv 配网成功回调（此时 WiFi 已由库连接成功）
+static void onImprovConnected(const char* ssid, const char* password) {
+  Serial.printf("[improv] provisioned: %s\n", ssid);
+  cfg.wifi_ssid = ssid;
+  cfg.wifi_pass = password;
+  saveConfig(cfg);   // 先持久化 WiFi；API Key/城市稍后在网页补填
+
+  // 启动常驻配置页，浏览器收到 deviceUrl 后会自动打开
+  portalServerBegin(cfg);
+
+  provisionMode = false;
+  normalMode    = true;
+  postInitDone  = false;
+  renderStatus("WiFi Connected", "http://" + WiFi.localIP().toString());
 }
 
 void setup() {
@@ -38,75 +97,77 @@ void setup() {
   delay(300);
   Serial.println("\n[main] WeatherClock starting");
 
+  // Improv 设备信息（浏览器配网界面展示），deviceUrl 配网成功后自动跳转
+  improvSerial.setDeviceInfo(ImprovTypes::ChipFamily::CF_ESP32_C3,
+                             "WeatherClock", "1.0.0", "WeatherClock",
+                             "http://{LOCAL_IPV4}");
+  improvSerial.onImprovConnected(onImprovConnected);
+
   pinMode(PIN_BOOT_BTN, INPUT_PULLUP);
 
   if (!screenInit()) {
-    Serial.println("[main] 屏幕初始化失败！");
+    Serial.println("[main] screen init failed!");
   } else {
     screenSetBrightness(SCREEN_BRIGHTNESS);
     renderStatus("WeatherClock", "ESP32-C3");
   }
 
-  bool configured = loadConfig(cfg);
+  bool hasWifi = loadConfig(cfg);
 
-  // 按住 BOOT 上电 -> 强制进配置门户
-  bool forcePortal = (digitalRead(PIN_BOOT_BTN) == LOW);
-  if (forcePortal) Serial.println("[main] BOOT 按键已按下，进入配置门户");
-
-  if (!configured || forcePortal) {
-    Serial.println("[main] 需要配置，进入配置门户…");
-    portalEnter(cfg);   // 阻塞，直到保存后重启
+  // 按住 BOOT 上电 -> softAP 门户兜底（阻塞）
+  if (digitalRead(PIN_BOOT_BTN) == LOW) {
+    Serial.println("[main] BOOT held -> softAP portal");
+    portalEnter(cfg);
   }
 
-  // 连接 WiFi
+  if (!hasWifi) {
+    // 未配置：进入 USB(Improv) 配网等待模式。
+    // WIFI_STA 模式供 Improv 扫描周边网络与连接使用。
+    provisionMode = true;
+    WiFi.persistent(false);
+    WiFi.setSleep(false);
+    WiFi.mode(WIFI_STA);
+    renderStatus("USB Setup", "Flash page sets WiFi");
+    Serial.println("[main] no WiFi config; waiting for USB Improv provisioning");
+    return;
+  }
+
+  // 已有配置：连接 WiFi
   renderStatus("Connecting WiFi...");
   Serial.printf("[wifi] SSID=%s\n", cfg.wifi_ssid.c_str());
-  if (!wifiConnect(cfg.wifi_ssid, cfg.wifi_pass, 20000)) {
-    Serial.println("[wifi] 连接失败，稍后重试");
-  } else {
-    // 启动常驻配置页：可通过 http://<设备IP> 或 http://weatherclock.local 访问
+  if (wifiConnect(cfg.wifi_ssid, cfg.wifi_pass, 20000)) {
     portalServerBegin(cfg);
     renderStatus("Ready", "http://" + WiFi.localIP().toString());
     delay(2500);
+    normalMode = true;
+  } else {
+    // 连接失败：进入 USB 配网模式，可用烧录页重新下发 WiFi
+    Serial.println("[wifi] connect failed; entering USB provision mode");
+    provisionMode = true;
+    WiFi.persistent(false);
+    WiFi.mode(WIFI_STA);
+    renderStatus("WiFi Failed", "Re-setup via USB");
   }
-
-  // NTP 时间
-  ntpBegin();
-  // 等待 NTP 同步（超时 20s，期间不阻塞 UI，先只尝试一次）
-  {
-    unsigned t0 = millis();
-    while (!timeIsSynced() && (millis() - t0 < 20000)) {
-      // 在这里渲染“同步中”
-      renderStatus("Syncing time...");
-      wifiReconnect(cfg.wifi_ssid, cfg.wifi_pass);
-      delay(200);
-    }
-  }
-
-  // 城市 -> LocationID（仅当第一次配置且未填经纬度时解析）
-  if (cfg.location_id.length() == 0 && cfg.city_name.length() > 0 &&
-      (cfg.lat == 0 && cfg.lon == 0)) {
-    renderStatus("Resolving city...");
-    String id;
-    if (geoResolveCity(cfg.qweather_key, cfg.city_name, id)) {
-      cfg.location_id = id;
-      saveLocationId(id);
-      Serial.printf("[geo] city=%s -> id=%s\n", cfg.city_name.c_str(), id.c_str());
-    } else {
-      Serial.println("[geo] 城市解析失败，天气可能不可用");
-    }
-  }
-
-  // 首次拉取天气
-  fetchWeatherSafe();
-
-  renderClock(nowSegments(), true);
 }
 
 void loop() {
   unsigned now = millis();
 
-  // 1. 时钟：每 500ms 切换冒号状态并刷新
+  // 始终处理 USB Improv 配网请求（任何模式下都可重新配网）
+  improvSerial.handleSerial();
+
+  if (provisionMode) {
+    // 等待浏览器通过 USB 下发 WiFi；屏幕保持提示
+    delay(10);
+    return;
+  }
+
+  if (!normalMode) { delay(10); return; }
+
+  // 联网后的一次性初始化（NTP/城市/首拉天气）
+  if (!postInitDone) postConnectInit();
+
+  // 1. 时钟：每 500ms 切换冒号
   if (now - lastBlink >= 500) {
     lastBlink = now;
     blinkOn = !blinkOn;
@@ -127,7 +188,7 @@ void loop() {
       lastReconnect = now;
       if (wifiReconnect(cfg.wifi_ssid, cfg.wifi_pass)) {
         ntpBegin();
-        Serial.println("[wifi] 已重连");
+        Serial.println("[wifi] reconnected");
       }
     }
   }
