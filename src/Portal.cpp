@@ -126,6 +126,8 @@ void portalEnter(const AppConfig& current) {
   WiFi.persistent(false);
   WiFi.setSleep(false);
   WiFi.mode(WIFI_AP_STA);
+  // C3 SuperMini 批次天线问题：满功率发射不可见，必须限功率（见 main.cpp capWifiTxPower）
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
   delay(100);
 
   // ---- 射频诊断：扫描周围 AP，验证 RX/天线是否工作 ----

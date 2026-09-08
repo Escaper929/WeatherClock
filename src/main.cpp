@@ -92,6 +92,13 @@ static void onImprovConnected(const char* ssid, const char* password) {
   renderStatus("WiFi Connected", "http://" + WiFi.localIP().toString());
 }
 
+// C3 SuperMini 部分批次天线在高发射功率下失配（同 BambuHelper issue #146 的
+// workaround）：满功率(默认~21dBm)时发出的帧路由器收不到——softAP 隐身、STA
+// 关联失败(AUTH_FAIL)。降到 8.5dBm 后正常。需在 esp_wifi 初始化后调用。
+static void capWifiTxPower() {
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+}
+
 // ---- WiFi 诊断：记录最近一次断开原因（用于屏幕显示） ----
 static volatile int gLastWifiReason = -1;
 static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -108,6 +115,7 @@ static bool customConnect(const char* ssid, const char* pass) {
   WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);
 
   if (WiFi.status() == WL_CONNECTED) { WiFi.disconnect(); delay(100); }
+  capWifiTxPower();
 
   // 扫描目标 AP：确认可见性与认证方式（浏览器占串口时同步显示到屏幕）
   renderStatus("Scanning...");
@@ -197,6 +205,7 @@ void setup() {
     WiFi.persistent(false);
     WiFi.setSleep(false);
     WiFi.mode(WIFI_STA);
+    capWifiTxPower();
     renderStatus("USB Setup", "Flash page sets WiFi");
     Serial.println("[main] no WiFi config; waiting for USB Improv provisioning");
     return;
@@ -205,6 +214,8 @@ void setup() {
   // 已有配置：连接 WiFi
   renderStatus("Connecting WiFi...");
   Serial.printf("[wifi] SSID=%s\n", cfg.wifi_ssid.c_str());
+  WiFi.mode(WIFI_STA);
+  capWifiTxPower();
   if (wifiConnect(cfg.wifi_ssid, cfg.wifi_pass, 20000)) {
     portalServerBegin(cfg);
     renderStatus("Ready", "http://" + WiFi.localIP().toString());
@@ -216,6 +227,7 @@ void setup() {
     provisionMode = true;
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
+    capWifiTxPower();
     renderStatus("WiFi Failed", "Re-setup via USB");
   }
 }
