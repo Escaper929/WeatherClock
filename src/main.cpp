@@ -92,6 +92,19 @@ static void onImprovConnected(const char* ssid, const char* password) {
   renderStatus("WiFi Connected", "http://" + WiFi.localIP().toString());
 }
 
+// Improv CURRENT_STATE 状态包广播。
+// esp-web-tools 烧录完只发一次 GET_CURRENT_STATE 探测；若该帧在设备启动期间到达
+// 会被丢弃，客户端将停在 STOPPED（界面显示 "Wi-Fi turned off"）。
+// 周期广播让客户端在 600s 等待窗口内的任意时刻都能拿到状态并切换出配网表单。
+static void improvSendState(uint8_t state) {
+  uint8_t pkt[11] = {'I', 'M', 'P', 'R', 'O', 'V', 0x01, 0x01, 0x01, state, 0};
+  uint8_t sum = 0;
+  for (int i = 0; i < 10; i++) sum += pkt[i];
+  pkt[10] = sum;
+  Serial.write(pkt, sizeof pkt);
+  Serial.flush();
+}
+
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -157,7 +170,12 @@ void loop() {
   improvSerial.handleSerial();
 
   if (provisionMode) {
-    // 等待浏览器通过 USB 下发 WiFi；屏幕保持提示
+    // 等待浏览器通过 USB 下发 WiFi：每秒广播一次 AUTHORIZED 状态包
+    static unsigned lastAnnounce = 0;
+    if (now - lastAnnounce >= 1000) {
+      lastAnnounce = now;
+      improvSendState(ImprovTypes::State::STATE_AUTHORIZED);
+    }
     delay(10);
     return;
   }
