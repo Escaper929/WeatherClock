@@ -7,10 +7,10 @@
     {
       "chipFamily": "ESP32-C3",
       "parts": [
-        { "path": "bootloader.bin", "offset": 0 },
-        { "path": "partitions.bin", "offset": 0x8000 },
-        { "path": "boot_app0.bin", "offset": 0xe000 },
-        { "path": "firmware.bin", "offset": 0x10000 }
+        { "path": "https://cdn.jsdelivr.net/gh/Escaper929/WeatherClock@__BIN_SHA__/web/bootloader.bin", "offset": 0 },
+        { "path": "https://cdn.jsdelivr.net/gh/Escaper929/WeatherClock@__BIN_SHA__/web/partitions.bin", "offset": 32768 },
+        { "path": "https://cdn.jsdelivr.net/gh/Escaper929/WeatherClock@__BIN_SHA__/web/boot_app0.bin", "offset": 57344 },
+        { "path": "https://cdn.jsdelivr.net/gh/Escaper929/WeatherClock@__BIN_SHA__/web/firmware.bin", "offset": 65536 }
       ]
     }
   ]

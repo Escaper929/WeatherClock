@@ -25,6 +25,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      bin_sha: ${{ steps.bins.outputs.bin_sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,15 +57,18 @@ jobs:
 
       # 把固件 bin 提交回仓库，jsDelivr 镜像才能代理到（国内访问稳定）
       - name: Commit firmware binaries to repo
+        id: bins
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/firmware.bin web/bootloader.bin web/partitions.bin web/boot_app0.bin web/version.txt
           if git diff --cached --quiet; then
             echo "No firmware changes to commit"
+            echo "bin_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: update firmware binaries [skip ci]"
             git push
+            echo "bin_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
             echo "Pushed firmware binaries for jsDelivr mirror"
           fi
 
@@ -74,14 +79,21 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # 关键：checkout build job 提交 bin 后的 commit，保证 manifest 引用的
+      # jsDelivr@SHA 里就是本次构建的固件（而不是上一轮的旧 bin）
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.bin_sha }}
 
-      # 此时 HEAD 就是「含最新 bin 的 commit」，用它作为 jsDelivr 版本，保证 bin 不 404
-      - name: Replace manifest SHA and stage
+      - name: Pin bin SHA in manifest and stage
         run: |
           SHA=$(git rev-parse HEAD)
-          echo "jsDelivr manifest sha: $SHA"
-          sed -i "s/__MANIFEST_SHA__/$SHA/g" web/index.html
+          echo "jsDelivr bins sha: $SHA"
+          sed -i "s/__BIN_SHA__/$SHA/g" web/manifest.json
+          # 校验：manifest 必须是合法 JSON 且已不含占位符
+          python3 -c "import json;json.load(open('web/manifest.json'));print('manifest.json valid JSON')"
+          grep -q "__BIN_SHA__" web/manifest.json && { echo "placeholder not replaced"; exit 1; } || true
+          python3 -c "import json;json.load(open('web/manifest-local.json'));print('manifest-local.json valid JSON')"
 
       - uses: actions/configure-pages@v5
 

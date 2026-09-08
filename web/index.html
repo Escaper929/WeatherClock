@@ -51,10 +51,14 @@
         <li>在弹窗里选择你家 WiFi、输入密码，设备联网后浏览器会<b>自动打开设备配置页</b>。</li>
       </ol>
       <div class="hit flash-colors">
-        <!-- manifest 走 jsDelivr 镜像（国内稳定）；__MANIFEST_SHA__ 由 CI 替换为 commit，防止 CDN 缓存旧固件 -->
-        <esp-web-install-button manifest="https://cdn.jsdelivr.net/gh/Escaper929/WeatherClock@__MANIFEST_SHA__/web/manifest.json">
+        <!-- manifest 同源加载（页面能开就能下）；固件 bin 走 jsDelivr（国内稳定）。
+             备用按钮：jsDelivr 不可达时，bin 也从本页同源（GitHub Pages）下载。 -->
+        <esp-web-install-button manifest="manifest.json">
           <button slot="activate">⚡ 连接并烧录 WeatherClock</button>
           <i slot="unsupported">当前浏览器不支持 WebSerial，请改用 Chrome / Edge 打开本页。</i>
+        </esp-web-install-button>
+        <esp-web-install-button manifest="manifest-local.json" style="margin-top:10px;display:block">
+          <button slot="activate" style="font-size:0.85em;padding:8px 14px">备用入口（CDN 不通时点这里）</button>
         </esp-web-install-button>
       </div>
       <div class="note">版本：<code id="ver">–</code> · 更新方法：推送代码即可自动重新编译并部署最新固件到本页。</div>
