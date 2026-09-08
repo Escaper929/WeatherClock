@@ -122,11 +122,21 @@ void portalEnter(const AppConfig& current) {
   String suffix = mac.length() >= 4 ? mac.substring(mac.length() - 4) : "0001";
   String apSsid = "WeatherClock-" + suffix;
 
-  // C3 SuperMini WiFi 初始化：关闭持久化、关闭省电、用信道 11
+  // C3 SuperMini WiFi 初始化：AP+STA（STA 用于射频扫描诊断），关闭省电
   WiFi.persistent(false);
   WiFi.setSleep(false);
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(WIFI_AP_STA);
   delay(100);
+
+  // ---- 射频诊断：扫描周围 AP，验证 RX/天线是否工作 ----
+  Serial.println("[diag] scanning nearby WiFi networks...");
+  int n = WiFi.scanNetworks();
+  Serial.printf("[diag] scan found %d networks:\n", n);
+  for (int i = 0; i < n && i < 12; i++) {
+    Serial.printf("[diag]   %d: %s  ch=%d rssi=%d\n", i,
+                  WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i));
+  }
+  WiFi.scanDelete();
 
   // 尝试开启 softAP（重试 3 次）
   bool apOk = false;
@@ -144,7 +154,9 @@ void portalEnter(const AppConfig& current) {
   }
 
   IPAddress apIP = WiFi.softAPIP();
-  Serial.printf("[portal] AP: %s  IP: %s\n", apSsid.c_str(), apIP.toString().c_str());
+  Serial.printf("[portal] AP: %s  IP: %s  ch=%d  mac=%s\n",
+                apSsid.c_str(), apIP.toString().c_str(),
+                WiFi.channel(), WiFi.softAPmacAddress().c_str());
   Serial.println("[portal] 请在浏览器访问 http://192.168.4.1");
 
   WebServer server(80);
