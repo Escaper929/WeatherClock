@@ -73,6 +73,7 @@ static String renderQmOptions(int cur) {
     {0, "不显示"},
     {1, "金价（积存金参考 · Au99.99 元/克）"},
     {2, "布伦特原油（美元/桶）"},
+    {4, "沪铜（上期所主力连续 · 元/吨）"},
     {3, "自定义 JSON 数据源"},
   };
   String s;
@@ -99,20 +100,21 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 .btn{width:100%;margin-top:14px;padding:11px;border:0;border-radius:8px;background:var(--acc);color:#032;font-size:15px;font-weight:700;cursor:pointer}
 .btn2{background:#1d6fff;color:#fff}
 .row{display:flex;gap:8px}.row>*{flex:1}
-#scr{width:240px;height:240px;background:#010711;border-radius:14px;border:2px solid var(--line);margin:14px auto 0;position:relative;overflow:hidden}
-#scr .date{position:absolute;top:3px;left:0;width:100%;text-align:center;color:#8fa3c8;font-size:13px;letter-spacing:1px}
-#scr .clock{position:absolute;top:30px;left:0;width:100%;text-align:center;color:#fff;font-size:52px;font-weight:700;font-family:Consolas,monospace;letter-spacing:2px}
-#scr .qrow{position:absolute;top:92px;left:16px;right:16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#8fa3c8;white-space:nowrap}
-#scr .qrow .qp{color:#07ffff;font-weight:700;margin-left:6px}
-#scr .qrow .up{color:#ff5252;font-weight:700}
-#scr .qrow .dn{color:#33dd88;font-weight:700}
-#scr .icard{position:absolute;top:120px;left:12px;right:12px;bottom:8px;border-radius:10px;background:#0a1730;border:1px solid #1a3a6d}
-#scr .icon{position:absolute;left:8px;top:30px;width:64px;text-align:center;font-size:44px}
-#scr .wtext{position:absolute;left:8px;bottom:8px;width:64px;text-align:center;color:#e8eefc;font-size:13px}
-#scr .temp{position:absolute;right:16px;top:18px;font-size:56px;font-weight:700;color:#ffa72e}
-#scr .deg{position:absolute;right:108px;top:14px;font-size:16px;color:#ffa72e}
-#scr .feel{position:absolute;right:16px;top:76px;color:#8fa3c8;font-size:13px}
-#scr .humi{position:absolute;right:16px;top:92px;color:#5cd7ff;font-size:13px}
+/* 240x240 屏幕预览：与固件 UiTheme/Screen.cpp 同一套设计语言（1px=1px） */
+#scr{width:240px;height:240px;background:#0f1116;border-radius:10px;border:1px solid #2a2e36;margin:14px auto 0;position:relative;overflow:hidden}
+#scr .pdate{position:absolute;top:8px;left:24px;color:#969da8;font-size:11px;letter-spacing:1px;white-space:nowrap}
+#scr .pcity{position:absolute;top:8px;right:24px;color:#969da8;font-size:11px;white-space:nowrap}
+#scr .pclock{position:absolute;top:28px;left:0;width:100%;text-align:center;color:#eae4d8;font-size:42px;font-weight:700;font-family:Consolas,Menlo,monospace;letter-spacing:4px;font-variant-numeric:tabular-nums}
+#scr .prule{position:absolute;top:98px;left:96px;width:48px;height:1px;background:#2a2e36}
+#scr .picon{position:absolute;left:36px;top:126px;width:40px;height:40px;line-height:40px;text-align:center;font-size:26px;opacity:.92}
+#scr .pwtext{position:absolute;left:24px;top:175px;width:64px;text-align:center;color:#969da8;font-size:11px}
+#scr .ptemp{position:absolute;right:22px;top:133px;color:#eae4d8;font-size:23px;font-weight:700;font-family:Consolas,Menlo,monospace;white-space:nowrap}
+#scr .ptemp .pdeg{font-size:10px;font-weight:400;color:#969da8;margin-left:2px}
+#scr .pmeta{position:absolute;left:104px;top:175px;color:#606772;font-size:11px;white-space:nowrap}
+#scr .pqrow{position:absolute;top:216px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#606772;white-space:nowrap}
+#scr .pqrow .qp{color:#969da8;font-weight:700;margin:0 4px}
+#scr .pqrow .up{color:#c68670;font-weight:700}
+#scr .pqrow .dn{color:#749c94;font-weight:700}
 #res{display:none;margin-top:10px;font-size:12px;line-height:1.6;padding:10px;border-radius:8px;background:var(--in);border:1px solid var(--line);white-space:pre-wrap;color:var(--txt)}
 #res.ok{border-color:#3a6}
 .tips{font-size:11px;color:var(--dim);margin-top:12px;line-height:1.6}
@@ -121,17 +123,15 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 <h1>☀ WeatherClock</h1><small>$IP$</small>
 <label>屏幕预览（当前浏览器本地时间，保存后设备按所选时区显示）</label>
 <div id='scr'>
-  <div class='date' id='pv-date'>--</div>
-  <div class='clock' id='pv-clock'>--:--</div>
-  <div class='qrow'><span id='pv-q'></span><span id='pv-qpct'></span></div>
-  <div class='icard'>
-    <div class='icon' id='pv-icon'>☀</div>
-    <div class='wtext' id='pv-wtext'>Sunny</div>
-    <div class='temp' id='pv-temp'>--</div>
-    <div class='deg' id='pv-deg'>°</div>
-    <div class='feel' id='pv-feel'>F --</div>
-    <div class='humi' id='pv-hum'>H --</div>
-  </div>
+  <div class='pdate' id='pv-date'>--</div>
+  <div class='pcity' id='pv-city'></div>
+  <div class='pclock' id='pv-clock'>--:--</div>
+  <div class='prule'></div>
+  <div class='picon' id='pv-icon'>☀</div>
+  <div class='pwtext' id='pv-wtext'>晴</div>
+  <div class='ptemp'><span id='pv-temp'>--</span><span class='pdeg'>°C</span></div>
+  <div class='pmeta' id='pv-meta'>湿度 -- / 体感 --</div>
+  <div class='pqrow'><span id='pv-q'></span><span id='pv-qpct'></span></div>
 </div>
 <div id='res'></div>
 </div>
@@ -170,13 +170,19 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 <script>
 var WICON={100:'☀',101:'🌤',102:'⛅',103:'☁',104:'☁',300:'🌦',301:'🌦',302:'⛈',303:'🌦',304:'⛈',305:'🌦',306:'🌦',307:'🌦',308:'🌧',309:'🌧',310:'🌧',311:'🌧',312:'⛈',313:'⛈',314:'⛈',315:'⛈',316:'⛈',317:'⛈',318:'⛈',399:'⛈',400:'🌨',401:'🌨',402:'🌨',403:'🌨',404:'🌨',405:'❄',406:'❄',407:'🌨',408:'❄',409:'❄',410:'❄',499:'🌨',500:'🌫',501:'🌫',502:'🌫',503:'🌫',504:'🌫',507:'🌫',508:'🌫',509:'🌫',510:'🌫',511:'🌫',512:'🌫',513:'🌫',514:'🌫',515:'🌫',999:'❓'};
 function ico(c){return WICON[c]||'☁';}
+var WTEXT={100:'晴',150:'晴',101:'多云',151:'多云',102:'少云',152:'少云',103:'晴间多云',153:'晴间多云',104:'阴',154:'阴',300:'阵雨',302:'雷阵雨',303:'强雷阵雨',305:'小雨',306:'中雨',307:'大雨',308:'极端降雨',310:'暴雨',399:'雨',400:'小雪',401:'中雪',402:'大雪',404:'雨夹雪',405:'雨夹雪',499:'雪',500:'薄雾',501:'雾',502:'霾',514:'雾'};
 function fmt2(n){return (n<10?'0':'')+n;}
+var WK=['周日','周一','周二','周三','周四','周五','周六'];
 function tick(){
   var d=new Date();
-  document.getElementById('pv-date').textContent=('SUN MON TUE WED THU FRI SAT'.split(' ')[d.getDay()])+'  '+fmt2(d.getMonth()+1)+'/'+fmt2(d.getDate());
+  document.getElementById('pv-date').textContent=WK[d.getDay()]+'  '+fmt2(d.getMonth()+1)+'/'+fmt2(d.getDate());
   document.getElementById('pv-clock').textContent=fmt2(d.getHours())+':'+fmt2(d.getMinutes());
 }
 setInterval(tick,1000);tick();
+function syncCity(){document.getElementById('pv-city').textContent=q('c');}
+var _ci=document.getElementById('cf').elements['c'];
+if(_ci)_ci.addEventListener('input',syncCity);
+syncCity();
 function q(n){var e=document.getElementById('cf').elements[n];return e?e.value.trim():'';}
 function toggleQ(){document.getElementById('qcustom').style.display=(q('qm')==='3')?'block':'none';}
 toggleQ();
@@ -193,10 +199,9 @@ function testApi(){
       res.className='ok';
       res.textContent='✓ 天气成功\n城市='+j.city+' ('+j.id+')\n天气='+j.text+'\n温度='+j.temp+'°C  体感='+j.feels+'°C  湿度='+j.hum+'%'+(j.qok===1?'\n行情='+j.qlab+' '+j.qprice+' '+j.qunit:'');
       document.getElementById('pv-icon').textContent=ico(j.icon);
-      document.getElementById('pv-wtext').textContent=j.text;
+      document.getElementById('pv-wtext').textContent=j.text||WTEXT[j.icon]||'天气';
       document.getElementById('pv-temp').textContent=Math.round(j.temp);
-      document.getElementById('pv-feel').textContent='F '+Math.round(j.feels);
-      document.getElementById('pv-hum').textContent='H '+j.hum+'%';
+      document.getElementById('pv-meta').textContent='湿度 '+j.hum+' / 体感 '+Math.round(j.feels)+'°';
     }else{
       res.textContent='✗ 失败：'+(j.err||'未知错误');
     }
