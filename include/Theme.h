@@ -21,10 +21,11 @@
 enum DisplayTheme : uint8_t {
   THEME_MODERN    = 0,   // 现代极简 + 复古电子钟（黑底暖白，即原版精修 UI）
   THEME_RETRO     = 1,   // 辐射终端（Pip-Boy 磷光绿，废土蒸汽朋克）
-  THEME_PIXEL     = 2,   // 像素艺术（点阵数字/像素图标/掌机边框）
+  THEME_PIXEL     = 2,   // Classic Platformer（像素横版游戏 HUD，柔和色）
   THEME_WASTELAND = 3,   // 废土终端（琥珀 CRT 工业面板，避难所气象站）
+  THEME_MARIO     = 4,   // 马里奥配色平台游戏（高饱和经典色）
 };
-constexpr int THEME_COUNT = 4;
+constexpr int THEME_COUNT = 5;
 
 const char*    themeName(DisplayTheme t);   // "Modern" / "Retro" / ...
 const char*    themeDesc(DisplayTheme t);   // 中文一句话描述（网页用）

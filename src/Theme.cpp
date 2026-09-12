@@ -11,12 +11,14 @@ void modernTick(const UiData& d, bool blinkColon);
 void retroTick (const UiData& d, bool blinkColon);
 void pixelTick (const UiData& d, bool blinkColon);
 void wastelandTick(const UiData& d, bool blinkColon);
+void marioTick (const UiData& d, bool blinkColon);
 
 const char* themeName(DisplayTheme t) {
   switch (t) {
     case THEME_RETRO:     return "Retro";
-    case THEME_PIXEL:     return "Pixel";
+    case THEME_PIXEL:     return "Platformer";
     case THEME_WASTELAND: return "Wasteland";
+    case THEME_MARIO:     return "Mario";
     default:              return "Modern";
   }
 }
@@ -24,8 +26,9 @@ const char* themeName(DisplayTheme t) {
 const char* themeDesc(DisplayTheme t) {
   switch (t) {
     case THEME_RETRO:     return "辐射终端，Pip-Boy 磷光绿废土风";
-    case THEME_PIXEL:     return "像素艺术，复古游戏机风格";
+    case THEME_PIXEL:     return "经典平台游戏 HUD，蓝天像素冒险场景";
     case THEME_WASTELAND: return "废土终端，琥珀 CRT 工业避难所面板";
+    case THEME_MARIO:     return "马里奥配色平台游戏，高饱和经典特征色";
     default:              return "现代极简，黑底暖白，适合日常使用";
   }
 }
@@ -48,6 +51,7 @@ void themeTick(const UiData& d, bool blinkColon) {
     case THEME_RETRO:     retroTick(d, blinkColon);     break;
     case THEME_PIXEL:     pixelTick(d, blinkColon);     break;
     case THEME_WASTELAND: wastelandTick(d, blinkColon); break;
+    case THEME_MARIO:     marioTick(d, blinkColon);     break;
     default:              modernTick(d, blinkColon);    break;
   }
 }

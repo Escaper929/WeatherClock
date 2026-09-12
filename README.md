@@ -3,9 +3,20 @@
 基于 **ESP32-C3 Super Mini + 1.54″ ST7789 (240×240)** 的桌面天气时钟，参考 [BambuHelper](https://github.com/Keralots/BambuHelper) 的架构实现：PlatformIO + Arduino + LovyanGFX + ArduinoJson。
 
 **功能**
-- 时间 + 日期 + 星期（NTP 同步，北京时间 UTC+8）
-- 当前天气：温度、天气图标、英文天气名、湿度（数据来自 [和风天气 QWeather](https://dev.qweather.com)，免费版）
-- 网页配置：设备连接 WiFi 后获得局域网 IP，开机时屏幕会显示，浏览器访问 `http://<设备IP>`（或 mDNS `http://weatherclock.local`）即可随时修改配置；首次烧录未配置时或按住 **BOOT 键** 上电，则进入软 AP `WeatherClock-xx`，访问 `http://192.168.4.1` 配置
+- 时间 + 日期 + 星期（NTP 同步，时区网页可选，支持夏令时）
+- 当前天气：温度、体感、湿度、程序化绘制的天气图标（数据来自 [和风天气 QWeather](https://dev.qweather.com)，免费版）
+- 行情显示：金价 / 沪铜 / 布伦特原油 / 自定义 JSON 数据源（红涨绿跌，10 分钟刷新）
+- **5 套显示主题**，网页点击即切换，即时生效、断电记忆（NVS 持久化）：
+
+  | 主题 | 风格 |
+  |---|---|
+  | Modern | 现代极简，黑底暖白七段 |
+  | Retro | Pip-Boy 磷光绿辐射终端（单色 CRT） |
+  | Platformer | 经典横版游戏 HUD，蓝天像素场景 |
+  | Wasteland | 琥珀 CRT 废土工业避难所面板 |
+  | Mario | 马里奥特征色平台游戏：红顶栏 / Coin 黄温度 / 砖墙行情条 |
+
+- 网页配置：左右双栏布局——左侧 240×240 实时预览（切主题即时换肤，与屏幕 1:1 设计语言），右侧全部设置项；支持「测试 API」用真实 Key 拉一次数据渲染预览
 - 断线自动重连、天气定时刷新（默认 15 分钟，可改）
 
 ## 快速开始：浏览器一键刷固件（无需安装 PlatformIO）
@@ -72,15 +83,27 @@ tianqishizhong/
 ├── partitions_4mb.csv  # 4MB 分区表（支持 OTA）
 ├── include/
 │   ├── BoardPins.h     # 引脚与常量
-│   ├── AppConfig.h     # 配置存储
-│   ├── WiFiTime.h      # WiFi + NTP
+│   ├── AppConfig.h     # 配置存储（NVS）
+│   ├── WiFiTime.h      # WiFi + NTP + 时区
 │   ├── Weather.h       # 和风天气客户端
-│   ├── Screen.h        # 屏幕渲染
+│   ├── Quote.h         # 行情数据源（金价/沪铜/原油/自定义 JSON）
+│   ├── Theme.h         # 多主题接口与 UiData 数据视图
+│   ├── UiTheme.h       # 基础色板工具
 │   └── Portal.h        # 网页配置门户
-└── src/                # 对应实现 + main.cpp
+└── src/
+    ├── main.cpp        # 主循环：数据层（时间/天气/行情）
+    ├── Screen.cpp      # ST7789 屏幕驱动
+    ├── Theme.cpp       # 主题分发与激活
+    ├── Portal.cpp      # 网页配置（双栏布局 + 主题换肤预览）
+    └── themes/         # 5 套主题实现 + ThemeShared 共享绘制原语
+        ├── theme_modern.cpp / theme_retro.cpp / theme_pixel.cpp
+        ├── theme_wasteland.cpp / theme_mario.cpp
+        └── ThemeShared.h/.cpp
 ```
 
 ## 自定义
 
-- 刷新间隔、亮度、时区：改 `include/BoardPins.h`
+- 刷新间隔、亮度：改 `include/BoardPins.h`
+- 时区：配置页下拉选择（POSIX TZ 串，支持夏令时），默认 UTC+8
 - 天气换成经纬度定位：配置门户里填“经度,纬度”即可
+- 新增主题：在 `src/themes/` 仿照现有主题新建 `theme_xxx.cpp` 实现 `xxxTick(const UiData&, bool)`，然后在 `include/Theme.h` 枚举加 id 并更新 `THEME_COUNT`、在 `src/Theme.cpp` 注册分发并补 `themeName()/themeDesc()`；各主题布局与配色完全独立（脏检测模式见 `Theme.h` 头注释），网页预览皮肤在 `Portal.cpp` 的 `applyTheme()`/CSS 加一个 class 即可

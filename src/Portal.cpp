@@ -105,7 +105,13 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(
 :root{--bg:#0b1022;--card:#151d38;--in:#0d1428;--line:#2a3a5f;--txt:#e8eefc;--dim:#8fa3c8;--acc:#33dd88}
 *{box-sizing:border-box}
 body{font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);display:flex;justify-content:center;margin:0;padding:16px}
-.wrap{max-width:420px;width:100%}
+/* 左右双栏：左预览（sticky 常驻）/ 右设置表单；窄屏回退单列 */
+.wrap{max-width:920px;width:100%;display:flex;gap:16px;align-items:flex-start}
+.colL{width:302px;flex:none}
+.colL .card{position:sticky;top:16px;margin-bottom:0}
+form{flex:1;min-width:0}
+form .card{margin-bottom:0}
+@media(max-width:760px){.wrap{flex-direction:column}.colL{width:100%}.colL .card{position:static}}
 .card{background:var(--card);border-radius:14px;padding:18px;margin-bottom:16px;border:1px solid var(--line)}
 h1{font-size:17px;margin:0 0 2px;color:var(--acc)}small{color:var(--dim)}
 label{display:block;margin:12px 0 4px;font-size:12px;color:var(--dim)}
@@ -138,11 +144,82 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 .th.sel{border-color:var(--acc);background:#122a20}
 .th.sel b{color:var(--acc)}
 #thres{font-size:11px;color:var(--acc);margin-top:6px;min-height:14px}
+/* Classic Platformer 预览皮肤（t=2 时启用，与固件 theme_pixel.cpp 同一设计语言） */
+#scr.plat{background:#5c94fc;border-radius:0}
+#scr .phud{display:none}
+#scr.plat .phud{display:block;position:absolute;top:0;left:0;width:100%;height:28px;background:#12224a}
+.plat .pdate{color:#fff;top:8px;left:12px;font-weight:700}
+.plat .pcity{color:#fff;top:8px;right:12px;font-weight:700}
+.plat .pclock{top:32px;color:#fff;font-size:36px;letter-spacing:2px;text-shadow:2px 0 0 #12224a,-2px 0 0 #12224a,0 2px 0 #12224a,0 -2px 0 #12224a,2px 2px 0 #12224a,-2px -2px 0 #12224a,2px -2px 0 #12224a,-2px 2px 0 #12224a}
+#scr .pcard{display:none}
+#scr.plat .pcard{display:block;position:absolute;left:20px;top:96px;width:194px;height:76px;border:3px solid #fff;background:#12224a}
+.plat .picon{left:28px;top:102px;color:#ffd84c}
+.plat .pwtext{left:86px;top:104px;width:130px;text-align:left;color:#ffd84c;font-weight:700}
+.plat .ptemp{top:96px;right:32px;color:#fff;font-size:24px;text-shadow:2px 0 0 #12224a,-2px 0 0 #12224a,0 2px 0 #12224a,0 -2px 0 #12224a}
+.plat .ptemp .pdeg{color:#9cc0f8}
+.plat .pmeta{left:86px;top:128px;right:auto;text-align:left;color:#9cc0f8}
+#scr .pground{display:none}
+#scr.plat .pground{display:block;position:absolute;bottom:0;left:0;width:100%;height:38px;background:#96663e}
+#scr .pgrass{display:none}
+#scr.plat .pgrass{display:block;position:absolute;bottom:34px;left:0;width:100%;height:8px;background:#5cb83c}
+#scr .pcloud{display:none}
+#scr.plat .pcloud{display:block;position:absolute;width:8px;height:8px;background:#fff;box-shadow:8px 0 #fff,16px 0 #fff,24px 0 #fff,8px -8px #fff,16px -8px #fff,4px 8px #b2caf0,20px 8px #b2caf0}
+#scr.plat .pcloud.c2{top:50px;right:14px;transform:scale(.8)}
+.plat .pqrow{top:210px;left:12px;right:12px;background:#12224a;border:1px solid #fff;padding:3px 6px;color:#fff}
+.plat .pqrow .qp{color:#ffd84c}
+.plat .pqrow .up{color:#ff7a4c}
+.plat .pqrow .dn{color:#4ce06a}
+/* Mario 配色皮肤（t=4，plat 布局 + 视觉层级用色） */
+#scr.mario .phud{background:#e52521;box-shadow:0 2px 0 #a91418}
+#scr.mario .pdate,#scr.mario .pcity{color:#fff7df;text-shadow:1px 0 0 #452313,-1px 0 0 #452313,0 1px 0 #452313,0 -1px 0 #452313}
+#scr.mario .pclock{color:#fff7df;text-shadow:2px 0 0 #452313,-2px 0 0 #452313,0 2px 0 #452313,0 -2px 0 #452313,2px 2px 0 #452313,-2px -2px 0 #452313,2px -2px 0 #452313,-2px 2px 0 #452313,4px 4px 0 #a91418}
+#scr.mario .pcard{background:#14529a;border-color:#452313;box-shadow:0 0 0 2px #fff7df}
+#scr.mario .picon{color:#ffd83d}
+#scr.mario .pwtext{color:#fff7df}
+#scr.mario .ptemp{color:#ffd83d;text-shadow:2px 0 0 #452313,-2px 0 0 #452313,0 2px 0 #452313,0 -2px 0 #452313}
+#scr.mario .ptemp .pdeg{color:#fff7df}
+#scr.mario .pmeta{color:#fff7df}
+#scr.mario .pground{background:#b85c32}
+#scr.mario .pgrass{background:#45c83d}
+#scr.mario .pqrow{background:repeating-linear-gradient(#b85c32 0 8px,#71351f 8px 9px);border-color:#fff7df;color:#fff7df}
+#scr.mario .pqrow .qp{color:#ffd83d;text-shadow:1px 0 0 #452313,-1px 0 0 #452313,0 1px 0 #452313,0 -1px 0 #452313}
+#scr.mario .pqrow .up{color:#e52521;text-shadow:1px 0 0 #452313,-1px 0 0 #452313,0 1px 0 #452313,0 -1px 0 #452313}
+#scr.mario .pqrow .dn{color:#45c83d;text-shadow:1px 0 0 #452313,-1px 0 0 #452313,0 1px 0 #452313,0 -1px 0 #452313}
+/* Retro 磷光绿皮肤（t=1，单色 CRT） */
+#scr.retro{background:#060a06}
+#scr.retro .pdate,#scr.retro .pcity{color:#96ffc3}
+#scr.retro .pclock{color:#96ffc3;text-shadow:0 0 8px rgba(150,255,195,.45)}
+#scr.retro .pcard{background:#0a140c;border-color:#1e6e3e}
+#scr.retro .picon,#scr.retro .pwtext,#scr.retro .ptemp{color:#96ffc3}
+#scr.retro .ptemp .pdeg{color:#4aa96c}
+#scr.retro .pmeta{color:#4aa96c}
+#scr.retro .pfrule{background:#1e3a26}
+#scr.retro .phud,#scr.retro .pground,#scr.retro .pgrass,#scr.retro .pcloud{display:none}
+#scr.retro .pqrow{background:#0a140c;border-color:#1e6e3e;color:#96ffc3}
+#scr.retro .pqrow .qp{color:#96ffc3}
+#scr.retro .pqrow .up,#scr.retro .pqrow .dn{color:#4aa96c}
+/* Wasteland 琥珀 CRT 皮肤（t=3，单色终端） */
+#scr.wasteland{background:#0a0906}
+#scr.wasteland .pdate,#scr.wasteland .pcity{color:#d6a85a}
+#scr.wasteland .pclock{color:#d6a85a;text-shadow:0 0 8px rgba(214,168,90,.4)}
+#scr.wasteland .pcard{background:#141008;border-color:#7a5528}
+#scr.wasteland .picon,#scr.wasteland .ptemp{color:#d6a85a}
+#scr.wasteland .ptemp .pdeg{color:#a9682a}
+#scr.wasteland .pwtext{color:#d0c7b2}
+#scr.wasteland .pmeta{color:#a9682a}
+#scr.wasteland .pfrule{background:#3a2c1a}
+#scr.wasteland .phud,#scr.wasteland .pground,#scr.wasteland .pgrass,#scr.wasteland .pcloud{display:none}
+#scr.wasteland .pqrow{background:#141008;border-color:#7a5528;color:#d0c7b2}
+#scr.wasteland .pqrow .qp{color:#d6a85a}
+#scr.wasteland .pqrow .up,#scr.wasteland .pqrow .dn{color:#a9682a}
 </style></head><body><div class='wrap'>
-<div class='card'>
+<div class='colL'><div class='card'>
 <h1>☀ WeatherClock</h1><small>$IP$</small>
 <label>屏幕预览（当前浏览器本地时间，保存后设备按所选时区显示）</label>
 <div id='scr'>
+  <div class='phud'></div>
+  <div class='pcloud c1'></div><div class='pcloud c2'></div>
+  <div class='pcard'></div>
   <div class='pdate' id='pv-date'>--</div>
   <div class='pcity' id='pv-city'></div>
   <div class='pclock' id='pv-clock'>--:--</div>
@@ -151,10 +228,12 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
   <div class='pwtext' id='pv-wtext'>晴</div>
   <div class='ptemp'><span id='pv-temp'>--</span><span class='pdeg'>°C</span></div>
   <div class='pmeta' id='pv-meta'>湿度 -- / 体感 --</div>
+  <div class='pground'></div><div class='pgrass'></div>
   <div class='pqrow'><span id='pv-q'></span><span id='pv-qpct'></span></div>
 </div>
 <div id='res'></div>
-</div>
+<div class='tips'>「测试 API」会用当前填写的 Key / Host / 城市真实请求一次和风接口，并把结果渲染到左侧预览，确认无误后再点「保存并重启」。</div>
+</div></div>
 <form id='cf' method='post' action='/save'>
 <div class='card'>
 <label>WiFi 名称 (SSID)</label>
@@ -187,7 +266,6 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 <div id='thres'></div>
 <button class='btn' type='button' onclick='testApi()'>测试 API · 刷新预览</button>
 <button class='btn btn2' type='submit'>保存并重启</button>
-<div class='tips'>「测试 API」会用当前填写的 Key / Host / 城市真实请求一次和风接口，并把结果渲染到上方预览，确认无误后再点「保存并重启」。</div>
 </div>
 </form>
 </div>
@@ -197,6 +275,14 @@ function ico(c){return WICON[c]||'☁';}
 var WTEXT={100:'晴',150:'晴',101:'多云',151:'多云',102:'少云',152:'少云',103:'晴间多云',153:'晴间多云',104:'阴',154:'阴',300:'阵雨',302:'雷阵雨',303:'强雷阵雨',305:'小雨',306:'中雨',307:'大雨',308:'极端降雨',310:'暴雨',399:'雨',400:'小雪',401:'中雪',402:'大雪',404:'雨夹雪',405:'雨夹雪',499:'雪',500:'薄雾',501:'雾',502:'霾',514:'雾'};
 function fmt2(n){return (n<10?'0':'')+n;}
 var WK=['周日','周一','周二','周三','周四','周五','周六'];
+function applyTheme(t){
+  var s=document.getElementById('scr');
+  s.classList.toggle('plat',(t==='2'||t==='4'));
+  s.classList.toggle('mario',t==='4');
+  s.classList.toggle('retro',t==='1');
+  s.classList.toggle('wasteland',t==='3');
+}
+applyTheme('$THV$');
 function tick(){
   var d=new Date();
   document.getElementById('pv-date').textContent=WK[d.getDay()]+'  '+fmt2(d.getMonth()+1)+'/'+fmt2(d.getDate());
@@ -214,6 +300,7 @@ function pickTheme(el){
   document.querySelectorAll('.th').forEach(function(x){x.classList.remove('sel');});
   el.classList.add('sel');
   document.getElementById('th').value=el.dataset.t;
+  applyTheme(el.dataset.t);
   var res=document.getElementById('thres');
   res.textContent='正在切换到 '+el.dataset.n+' …';
   fetch('/api/theme',{method:'POST',body:'t='+el.dataset.t,headers:{'Content-Type':'application/x-www-form-urlencoded'}})
