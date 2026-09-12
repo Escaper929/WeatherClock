@@ -2,16 +2,16 @@
 //  Screen.cpp - ST7789 240x240 渲染实现
 //
 //  UI 设计语言：现代极简 + 轻微复古电子钟
-//    顶栏   星期 / 日期（左）  城市（右）          三级信息
+//    顶栏   星期+日期（左，同基线） 城市（右）      三级信息
 //    主区   自绘七段数码管时钟（58px，绝对主角）   一级信息
-//    分割   一条 48px 细发丝线
-//    天气   统一剪影图标 + 天气文字 ｜ 温度 + 湿度/体感（无卡片无边框）
-//    页脚   行情一行，整体弱化为四级信息
+//    天气   2×2 网格：左列图标+天气文字，
+//           右列七段温度（时间同语言缩小版）+ 湿度/体感（无卡片无边框）
+//    页脚   发丝线 + 行情一行，整体弱化为四级信息
 //
 //  颜色与几何全部集中在 include/UiTheme.h。
 //  渲染策略：分脏矩形擦除-重绘（不 fillScreen，区域小，无可见闪烁）。
-//  字体：LovyanGFX 内置 FreeMonoBold（温度/行情数字）+ efontCN（中文），
-//        时间不使用任何字库——纯代码绘制七段数码管，零 flash 开销、像素级统一。
+//  字体：时间与温度均为纯代码绘制七段数码管（同一视觉语言，零字库开销），
+//        中文/辅助信息 efontCN，行情数字 FreeMonoBold9pt。
 // ============================================================================
 #include "Screen.h"
 #include "BoardPins.h"
@@ -74,9 +74,8 @@ static void backlightSetup() {
 // 字体选择（统一只允许这几种，不再散落各处）
 // ---------------------------------------------------------------------------
 // efontCN(U8g2font) 与 FreeMono(GFXfont) 均实现 IFont，统一用基类指针
-static const lgfx::IFont* const FONT_CN    = &fonts::efontCN_12;          // 中文/辅助信息
-static const lgfx::IFont* const FONT_NUM   = &fonts::FreeMonoBold24pt7b;  // 温度（二级）
-static const lgfx::IFont* const FONT_SMALL = &fonts::FreeMonoBold9pt7b;   // 行情页脚
+static const lgfx::IFont* const FONT_CN    = &fonts::efontCN_12;         // 中文/辅助信息
+static const lgfx::IFont* const FONT_SMALL = &fonts::FreeMonoBold9pt7b;  // 行情页脚数字
 
 static const char* WEEK_CN[] = {"周日","周一","周二","周三","周四","周五","周六"};
 
@@ -108,32 +107,41 @@ void screenSetCity(const String& city) {
 }
 
 // ---------------------------------------------------------------------------
-// 七段数码管时钟（自绘，只画亮段，不画灭段避免 SPI 空写闪烁）
+// 七段数码管（自绘，只画亮段，不画灭段避免 SPI 空写闪烁）
+// 时间 58px 与温度 36px 共用同一套几何与语言，仅参数不同
 // ---------------------------------------------------------------------------
 // 段映射 bit: a=顶 b=右上 c=右下 d=底 e=左下 f=左上 g=中
 static const uint8_t SEG_FONT[10] = {
   0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
 };
 
-static void segBar(int x, int y, int w, int h, uint16_t col) {
-  lcd.fillRoundRect(x, y, w, h, 2, col);
+struct SegGeom { int w, h, t, gap; };
+
+static void segBar(int x, int y, int w, int h, int t, uint16_t col) {
+  lcd.fillRoundRect(x, y, w, h, t >= 5 ? 2 : 1, col);
 }
 
-static void drawSegDigit(int ox, int oy, int n) {
-  const int T  = SEG_T;
-  const int hw = SEG_W - 2 * (T - 1);
+static void drawSegDigitAt(int ox, int oy, int n, const SegGeom& g, uint16_t col) {
+  const int T  = g.t;
+  const int hw = g.w - 2 * (T - 1);
   const int hx = ox + T - 1;
-  const int vl = SEG_H / 2 - T - 2 * SEG_GAP;
+  const int vl = g.h / 2 - T - 2 * g.gap;
   uint8_t m = SEG_FONT[n];
 
   // 只画亮段，灭段不画（背景已是纯黑）
-  if (m & 0x01) segBar(hx, oy, hw, T, INK);                          // a
-  if (m & 0x02) segBar(ox + SEG_W - T, oy + T + SEG_GAP, T, vl, INK); // b
-  if (m & 0x04) segBar(ox + SEG_W - T, oy + SEG_H - T - SEG_GAP - vl, T, vl, INK); // c
-  if (m & 0x08) segBar(hx, oy + SEG_H - T, hw, T, INK);            // d
-  if (m & 0x10) segBar(ox, oy + SEG_H - T - SEG_GAP - vl, T, vl, INK); // e
-  if (m & 0x20) segBar(ox, oy + T + SEG_GAP, T, vl, INK);          // f
-  if (m & 0x40) segBar(hx, oy + (SEG_H - T) / 2, hw, T, INK);     // g
+  if (m & 0x01) segBar(hx, oy, hw, T, T, col);                          // a
+  if (m & 0x02) segBar(ox + g.w - T, oy + T + g.gap, T, vl, T, col);    // b
+  if (m & 0x04) segBar(ox + g.w - T, oy + g.h - T - g.gap - vl, T, vl, T, col); // c
+  if (m & 0x08) segBar(hx, oy + g.h - T, hw, T, T, col);                // d
+  if (m & 0x10) segBar(ox, oy + g.h - T - g.gap - vl, T, vl, T, col);   // e
+  if (m & 0x20) segBar(ox, oy + T + g.gap, T, vl, T, col);              // f
+  if (m & 0x40) segBar(hx, oy + (g.h - T) / 2, hw, T, T, col);          // g
+}
+
+static void drawSegMinus(int ox, int oy, const SegGeom& g, uint16_t col) {
+  const int T  = g.t;
+  const int hw = g.w - 2 * (T - 1);
+  segBar(ox + T - 1, oy + (g.h - T) / 2, hw, T, T, col);
 }
 
 static void drawColon(int cx, int oy, bool on) {
@@ -148,31 +156,32 @@ void renderClock(unsigned long t, bool blinkColon) {
 
   int hh = tm.tm_hour, mm = tm.tm_min;
 
-  // 顶栏：星期/日期（左）+ 城市（右），分钟变化才重绘；分隔线随之常驻
+  // 顶栏：星期+日期（左，同字号同基线，固定窄间距）+ 城市（右）；
+  // 一行规整信息栏，分钟变化才重绘
   uint16_t newKey = (uint16_t)((tm.tm_wday << 8) | mm);
   if (newKey != gLastTopKey) {
     gLastTopKey = newKey;
     lcd.fillRect(ZONE_TOP.x, ZONE_TOP.y, ZONE_TOP.w, ZONE_TOP.h, BG);
 
-    char dat[24];
-    snprintf(dat, sizeof dat, "%s  %02d/%02d", WEEK_CN[tm.tm_wday],
-             tm.tm_mon + 1, tm.tm_mday);
-    lcd.setTextDatum(middle_left);
     lcd.setFont(FONT_CN);
     lcd.setTextSize(1);
     lcd.setTextColor(INK2, BG);
-    lcd.drawString(dat, TOP_X_L, TOP_Y);
+    lcd.setTextDatum(middle_left);
+    const char* wk = WEEK_CN[tm.tm_wday];
+    lcd.drawString(wk, TOP_X_L, TOP_Y);
+    char dat[12];
+    snprintf(dat, sizeof dat, "%02d/%02d", tm.tm_mon + 1, tm.tm_mday);
+    lcd.drawString(dat, TOP_X_L + lcd.textWidth(wk) + TOP_GAP, TOP_Y);
 
     if (gCityName.length()) {
       lcd.setTextDatum(middle_right);
       lcd.drawString(gCityName.c_str(), TOP_X_R, TOP_Y);
     }
-
-    lcd.fillRect(RULE_X, RULE_Y, RULE_W, 1, HAIRLINE);
   }
 
   // 时钟区：逐位脏检测——只有真正变化的那一位才擦除重绘（32x58 小区域），
   // 其余时间每 500ms 仅刷新冒号两个小圆点，彻底消除整区擦除造成的闪烁
+  const SegGeom segClock{SEG_W, SEG_H, SEG_T, SEG_GAP};
   int xs[4] = { SEG_X0,
                 SEG_X0 + SEG_W + DIG_GAP,
                 COLON_CX + COL_GAP / 2,
@@ -181,7 +190,7 @@ void renderClock(unsigned long t, bool blinkColon) {
   for (int i = 0; i < 4; i++) {
     if (digits[i] != gLastDigit[i]) {
       lcd.fillRect(xs[i], SEG_Y0, SEG_W, SEG_H, BG);  // 先清旧字亮段
-      drawSegDigit(xs[i], SEG_Y0, digits[i]);
+      drawSegDigitAt(xs[i], SEG_Y0, digits[i], segClock, INK);
       gLastDigit[i] = digits[i];
     }
   }
@@ -203,10 +212,9 @@ static void drawCloud(int cx, int cy, uint16_t col) {
   lcd.fillRect(cx - 19, cy + 1, 38, 9, col);
 }
 
-// 线框太阳：2px 圆环 + 8 道 2px 射线
+// 实心日盘 + 8 道 2px 射线（与云/月统一的填充剪影语言）
 static void drawSunShape(int cx, int cy, int r, uint16_t col) {
-  lcd.drawCircle(cx, cy, r, col);
-  lcd.drawCircle(cx, cy, r - 1, col);
+  lcd.fillCircle(cx, cy, r, col);
   for (int i = 0; i < 8; i++) {
     double a = i * M_PI / 4.0;
     int ca = (int)round(cos(a)), sa = (int)round(sin(a));
@@ -330,50 +338,76 @@ static const char* weatherTextCN(int code) {
 }
 
 // ---------------------------------------------------------------------------
-// 天气组：无卡片。左列图标+天气文字，右列温度+湿度/体感，两行基线对齐
+// 天气组：2×2 网格，无卡片。
+//   左列  剪影图标 / 天气文字（同中心）
+//   右列  七段温度（+°C 上标）/ 湿度·体感（右缘对齐同一网格线）
+// 上下两行共用基线，形成一组完整信息而非散落的元素
 // ---------------------------------------------------------------------------
+// 温度：自绘七段（时间同语言缩小版），右缘对齐 TEMP_XR，支持负温度
+static void drawTempSegments(int val, int xRight, int yTop) {
+  const SegGeom segTemp{TSEG_W, TSEG_H, TSEG_T, TSEG_GAP};
+  bool neg = val < 0;
+  int a = val < 0 ? -val : val;
+  char buf[4];
+  int n = snprintf(buf, sizeof buf, "%d", a);   // |val| <= 99，最多 2 位
+  int slots = n + (neg ? 1 : 0);
+  int x = xRight - (slots * TSEG_W + (slots - 1) * TDIG_GAP);
+  if (neg) {
+    drawSegMinus(x, yTop, segTemp, INK);
+    x += TSEG_W + TDIG_GAP;
+  }
+  for (int i = 0; i < n; i++) {
+    drawSegDigitAt(x, yTop, buf[i] - '0', segTemp, INK);
+    x += TSEG_W + TDIG_GAP;
+  }
+  // °C 上标，二级色
+  lcd.setFont(FONT_CN);
+  lcd.setTextSize(1);
+  lcd.setTextDatum(top_left);
+  lcd.setTextColor(INK2, BG);
+  lcd.drawString("\xC2\xB0""C", xRight + DEG_DX, yTop + DEG_DY);
+}
+
 void renderWeather(const WeatherData& w) {
   lcd.fillRect(ZONE_WEATHER.x, ZONE_WEATHER.y, ZONE_WEATHER.w, ZONE_WEATHER.h, BG);
 
-  // 左列
+  // 左列上行：剪影图标
   drawWeatherIcon(w.icon, W_ICON_CX, W_ICON_CY);
+
+  // 左列下行：天气文字（居中于图标；罕见长文本左缘保护，不裁切）
   const char* desc = w.text.length() ? w.text.c_str() : weatherTextCN(w.icon);
   lcd.setFont(FONT_CN);
   lcd.setTextSize(1);
   lcd.setTextDatum(middle_center);
   lcd.setTextColor(INK2, BG);
-  lcd.drawString(desc, W_ICON_CX, W_TEXT_Y);
+  int descX = W_ICON_CX;
+  int descW = lcd.textWidth(desc);
+  if (descX - descW / 2 < 14) descX = 14 + descW / 2;
+  lcd.drawString(desc, descX, W_TEXT_Y);
 
-  // 右列：温度（统一暖白色，不再按冷热变红/蓝）
-  char tbuf[8];
-  snprintf(tbuf, sizeof tbuf, "%d", (int)(w.temp + 0.5f));
-  lcd.setFont(FONT_NUM);
-  lcd.setTextSize(1);
-  lcd.setTextDatum(middle_right);
-  lcd.setTextColor(INK, BG);
-  lcd.drawString(tbuf, W_TEMP_XR, W_TEMP_Y);
-  // °C 上标，二级色
-  lcd.setFont(FONT_CN);
-  lcd.setTextDatum(top_left);
-  lcd.setTextColor(INK2, BG);
-  lcd.drawString("\xC2\xB0""C", W_TEMP_XR + 2, W_TEMP_Y - 15);
+  // 右列上行：温度（七段，暖白，不使用告警色）
+  drawTempSegments((int)lroundf(w.temp), TEMP_XR, TEMP_CY - TSEG_H / 2);
 
-  // 湿度 / 体感：三级信息一行 quiet 排版
+  // 右列下行：湿度 / 体感，弱化的三级信息，右对齐到边距网格
   char mbuf[40];
   snprintf(mbuf, sizeof mbuf, "湿度 %d%% / 体感 %d\xC2\xB0",
-           w.humidity, (int)(w.feels + 0.5f));
+           w.humidity, (int)lroundf(w.feels));
   lcd.setFont(FONT_CN);
-  lcd.setTextDatum(middle_left);
+  lcd.setTextDatum(middle_right);
   lcd.setTextColor(INK3, BG);
-  lcd.drawString(mbuf, W_META_X, W_META_Y);
+  lcd.drawString(mbuf, W_META_XR, W_META_Y);
 }
 
 // ---------------------------------------------------------------------------
-// 行情页脚：四级信息。标签/单位三级灰，价格二级，涨跌低饱和陶土/青灰
+// 行情页脚：发丝线定义"底部状态栏"，信息弱化为四级。
+// 标签/单位三级灰，价格二级，涨跌低饱和陶土/青灰
 // ---------------------------------------------------------------------------
 void renderQuote(const QuoteData& q) {
   lcd.fillRect(ZONE_QUOTE.x, ZONE_QUOTE.y, ZONE_QUOTE.w, ZONE_QUOTE.h, BG);
   if (!q.ok) return;
+
+  // 页脚发丝线：让行情行成为有结构的页脚，而非漂浮的一行字
+  lcd.fillRect(FOOT_RULE_X, FOOT_RULE_Y, FOOT_RULE_W, 1, HAIRLINE);
 
   // 涨跌幅文本（先确定，便于给左段预留右侧空间）
   bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
@@ -452,7 +486,7 @@ void renderStatus(const char* msg, const String& sub) {
     lcd.setTextColor(INK3, BG);
     lcd.drawString(sub.c_str(), 120, 140);
   }
-  gLastTopKey = 0xFFFF;     // 下次 renderClock 重画顶栏与分隔线
+  gLastTopKey = 0xFFFF;     // 下次 renderClock 重画顶栏
   for (int i = 0; i < 4; i++) gLastDigit[i] = -1;  // 重画四位数字
   gLastBlinkOn = false;     // 重置冒号状态，强制首次全绘
 }

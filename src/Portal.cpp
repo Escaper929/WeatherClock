@@ -102,16 +102,16 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 .row{display:flex;gap:8px}.row>*{flex:1}
 /* 240x240 屏幕预览：与固件 UiTheme/Screen.cpp 同一套设计语言（1px=1px） */
 #scr{width:240px;height:240px;background:#0f1116;border-radius:10px;border:1px solid #2a2e36;margin:14px auto 0;position:relative;overflow:hidden}
-#scr .pdate{position:absolute;top:8px;left:24px;color:#969da8;font-size:11px;letter-spacing:1px;white-space:nowrap}
-#scr .pcity{position:absolute;top:8px;right:24px;color:#969da8;font-size:11px;white-space:nowrap}
-#scr .pclock{position:absolute;top:28px;left:0;width:100%;text-align:center;color:#eae4d8;font-size:42px;font-weight:700;font-family:Consolas,Menlo,monospace;letter-spacing:4px;font-variant-numeric:tabular-nums}
-#scr .prule{position:absolute;top:98px;left:96px;width:48px;height:1px;background:#2a2e36}
-#scr .picon{position:absolute;left:36px;top:126px;width:40px;height:40px;line-height:40px;text-align:center;font-size:26px;opacity:.92}
-#scr .pwtext{position:absolute;left:24px;top:175px;width:64px;text-align:center;color:#969da8;font-size:11px}
-#scr .ptemp{position:absolute;right:22px;top:133px;color:#eae4d8;font-size:23px;font-weight:700;font-family:Consolas,Menlo,monospace;white-space:nowrap}
-#scr .ptemp .pdeg{font-size:10px;font-weight:400;color:#969da8;margin-left:2px}
-#scr .pmeta{position:absolute;left:104px;top:175px;color:#606772;font-size:11px;white-space:nowrap}
-#scr .pqrow{position:absolute;top:216px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#606772;white-space:nowrap}
+#scr .pdate{position:absolute;top:9px;left:24px;color:#a2a49c;font-size:11px;letter-spacing:1px;white-space:nowrap}
+#scr .pcity{position:absolute;top:9px;right:24px;color:#a2a49c;font-size:11px;white-space:nowrap}
+#scr .pclock{position:absolute;top:35px;left:0;width:100%;text-align:center;color:#eae4d8;font-size:42px;font-weight:700;font-family:Consolas,Menlo,monospace;letter-spacing:4px;font-variant-numeric:tabular-nums}
+#scr .pfrule{position:absolute;top:208px;left:24px;right:24px;height:1px;background:#2c2f36}
+#scr .picon{position:absolute;left:36px;top:118px;width:40px;height:40px;line-height:40px;text-align:center;font-size:26px;opacity:.92}
+#scr .pwtext{position:absolute;left:24px;top:165px;width:64px;text-align:center;color:#a2a49c;font-size:11px}
+#scr .ptemp{position:absolute;right:21px;top:122px;color:#eae4d8;font-size:23px;font-weight:700;font-family:Consolas,Menlo,monospace;white-space:nowrap}
+#scr .ptemp .pdeg{font-size:10px;font-weight:400;color:#a2a49c;margin-left:2px}
+#scr .pmeta{position:absolute;right:24px;top:165px;color:#6e7076;font-size:11px;white-space:nowrap;text-align:right}
+#scr .pqrow{position:absolute;top:218px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#6e7076;white-space:nowrap}
 #scr .pqrow .qp{color:#969da8;font-weight:700;margin:0 4px}
 #scr .pqrow .up{color:#c68670;font-weight:700}
 #scr .pqrow .dn{color:#749c94;font-weight:700}
@@ -126,7 +126,7 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
   <div class='pdate' id='pv-date'>--</div>
   <div class='pcity' id='pv-city'></div>
   <div class='pclock' id='pv-clock'>--:--</div>
-  <div class='prule'></div>
+  <div class='pfrule'></div>
   <div class='picon' id='pv-icon'>☀</div>
   <div class='pwtext' id='pv-wtext'>晴</div>
   <div class='ptemp'><span id='pv-temp'>--</span><span class='pdeg'>°C</span></div>
