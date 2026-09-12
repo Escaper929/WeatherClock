@@ -13,7 +13,18 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
+#include <Update.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <time.h>
+
+// 固件版本串：CI 构建时注入 src/FwVersion.h（短 SHA + UTC 日期，与 web/version.txt 同源），
+// 本地构建无该头文件时回退为编译时间戳。
+#ifdef FW_VERSION
+#define FWV_STR FW_VERSION
+#else
+#define FWV_STR (__DATE__ " " __TIME__)
+#endif
 
 // 常驻配置服务器（STA 模式）
 static WebServer* gServer = nullptr;
@@ -105,13 +116,11 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(
 :root{--bg:#0b1022;--card:#151d38;--in:#0d1428;--line:#2a3a5f;--txt:#e8eefc;--dim:#8fa3c8;--acc:#33dd88}
 *{box-sizing:border-box}
 body{font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);display:flex;justify-content:center;margin:0;padding:16px}
-/* 左右双栏：左预览（sticky 常驻）/ 右设置表单；窄屏回退单列 */
+/* 左右双栏：左预览列（sticky 常驻，含固件更新）/ 右设置表单；窄屏回退单列 */
 .wrap{max-width:920px;width:100%;display:flex;gap:16px;align-items:flex-start}
-.colL{width:302px;flex:none}
-.colL .card{position:sticky;top:16px;margin-bottom:0}
-form{flex:1;min-width:0}
-form .card{margin-bottom:0}
-@media(max-width:760px){.wrap{flex-direction:column}.colL{width:100%}.colL .card{position:static}}
+.colL{width:302px;flex:none;position:sticky;top:16px}
+.colR{flex:1;min-width:0}
+@media(max-width:760px){.wrap{flex-direction:column}.colL{width:100%;position:static}}
 .card{background:var(--card);border-radius:14px;padding:18px;margin-bottom:16px;border:1px solid var(--line)}
 h1{font-size:17px;margin:0 0 2px;color:var(--acc)}small{color:var(--dim)}
 label{display:block;margin:12px 0 4px;font-size:12px;color:var(--dim)}
@@ -233,7 +242,21 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 </div>
 <div id='res'></div>
 <div class='tips'>「测试 API」会用当前填写的 Key / Host / 城市真实请求一次和风接口，并把结果渲染到左侧预览，确认无误后再点「保存并重启」。</div>
-</div></div>
+</div>
+<div class='card'>
+<label>固件更新 · 当前版本 $FWV$</label>
+<div class='row'>
+<div><button class='btn' type='button' onclick='otaCheck()'>检查更新</button></div>
+<div><button class='btn btn2' type='button' id='otadl' style='display:none' onclick='otaFlash()'>下载并刷机</button></div>
+</div>
+<div id='ota' style='margin-top:8px;font-size:12px;color:var(--dim)'></div>
+<div class='tips'>在线更新自动从 GitHub（jsDelivr 镜像，国内可达）拉取最新固件，写入后自动重启，全程无需数据线；期间保持供电与网络。</div>
+<label style='margin-top:10px'>手动刷本地 bin（备用）</label>
+<input type='file' id='otafile' accept='.bin'>
+<button class='btn' type='button' onclick='otaStart()'>上传所选文件</button>
+</div>
+</div>
+<div class='colR'>
 <form id='cf' method='post' action='/save'>
 <div class='card'>
 <label>WiFi 名称 (SSID)</label>
@@ -335,6 +358,44 @@ function testApi(){
   })
   .catch(function(e){res.textContent='✗ 请求设备失败：'+e;});
 }
+function otaStart(){
+  var f=document.getElementById('otafile').files[0];
+  var op=document.getElementById('ota');
+  if(!f){op.textContent='请先选择 .bin 固件文件';return;}
+  var x=new XMLHttpRequest();
+  x.open('POST','/update');
+  x.upload.onprogress=function(e){if(e.lengthComputable)op.textContent='上传中 '+Math.round(e.loaded/e.total*100)+'%…';};
+  x.onload=function(){var r={};try{r=JSON.parse(x.responseText)}catch(_){}
+    if(r.ok===1){op.textContent='✓ 刷机成功，设备重启中，约 10 秒后重新连接…';}
+    else{op.textContent='✗ 失败：'+(r.err||('HTTP '+x.status));}};
+  x.onerror=function(){op.textContent='✗ 连接中断（设备可能正在重启）';};
+  var fd=new FormData();fd.append('bin',f);x.send(fd);
+}
+function otaCheck(){
+  var o=document.getElementById('ota');
+  o.textContent='正在查询 GitHub 最新版本…';
+  fetch('/api/fwcheck').then(function(r){return r.json();}).then(function(j){
+    if(j.ok!==1){o.textContent='✗ 检查失败：'+j.err;return;}
+    if(j.hasnew){o.textContent='发现新版本 '+j.latest+'（当前 '+j.cur+'），点击右侧按钮开始更新';
+      document.getElementById('otadl').style.display='';}
+    else{o.textContent='✓ 已是最新版本';document.getElementById('otadl').style.display='none';}
+  }).catch(function(e){o.textContent='✗ 检查失败：'+e;});
+}
+function otaFlash(){
+  var b=document.getElementById('otadl');
+  var o=document.getElementById('ota');
+  b.disabled=true;
+  fetch('/api/fwupdate',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
+    if(j.ok!==1){o.textContent='✗ 无法开始：'+j.err;b.disabled=false;return;}
+    var t=setInterval(function(){
+      fetch('/api/fwstatus').then(function(r){return r.json();}).then(function(s){
+        if(s.state===1){o.textContent='下载中 '+s.pct+'%…';}
+        else if(s.state===2){clearInterval(t);o.textContent='✓ 刷机完成，设备重启中，约 10 秒后重新连接…';}
+        else if(s.state===3){clearInterval(t);o.textContent='✗ 失败：'+s.err;b.disabled=false;}
+      }).catch(function(){clearInterval(t);o.textContent='连接中断（设备正在重启）';});
+    },1000);
+  }).catch(function(e){o.textContent='✗ 请求失败：'+e;b.disabled=false;});
+}
 function esc(s){return String(s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 </script></body></html>
 )HTML";
@@ -359,6 +420,7 @@ static String renderPage(const AppConfig& cfg, const String& ipText) {
   s.replace("$QL$", cfg.quote_label);
   s.replace("$THEMES$", renderThemeOptions(cfg.theme));
   s.replace("$THV$", String(cfg.theme));
+  s.replace("$FWV$", FWV_STR);
   return s;
 }
 
@@ -509,6 +571,137 @@ static void handleSave(WebServer& server, AppConfig& cfg) {
 }
 
 // 注册路由（两种模式共用）；ipText 按值传入并捕获，避免悬垂引用
+// ---- 在线固件更新：版本比对走 /api/fwcheck，下载由后台任务执行，进度轮询 /api/fwstatus ----
+// bin 源用 version.txt 里的短 SHA pin 住 jsDelivr URL（immutable，不受 CDN 缓存影响）
+static const char FW_REPO[] = "Escaper929/WeatherClock";
+enum { FW_IDLE = 0, FW_DL = 1, FW_OK = 2, FW_FAIL = 3 };
+static volatile int     gFwState = FW_IDLE;
+static volatile int     gFwPct   = 0;
+static String gFwErr;
+
+static bool fwHttpBegin(WiFiClientSecure& cl, HTTPClient& http, const String& url) {
+  cl.setInsecure();               // 与 Weather.cpp 同策略：不校验证书，省 flash/RAM
+  cl.setTimeout(10);              // 秒
+  return http.begin(cl, url);
+}
+
+// 拉取 web/version.txt（短SHA 日期），失败返回空串
+static String fwFetchLatest() {
+  WiFiClientSecure cl;
+  HTTPClient http;
+  String url = String("https://cdn.jsdelivr.net/gh/") + FW_REPO + "@main/web/version.txt?t=" + millis();
+  String out;
+  if (fwHttpBegin(cl, http, url) && http.GET() == 200) {
+    out = http.getString();
+    out.trim();
+  }
+  http.end();
+  return out;
+}
+
+static void handleFwCheck(WebServer& server) {
+  String latest = fwFetchLatest();
+  if (latest.length() == 0) {
+    server.send(200, "application/json", "{\"ok\":0,\"err\":\"无法连接 jsDelivr 镜像\"}");
+    return;
+  }
+  bool hasnew = latest != FWV_STR;
+  server.send(200, "application/json",
+              String("{\"ok\":1,\"cur\":\"") + FWV_STR + "\",\"latest\":\"" + latest +
+              "\",\"hasnew\":" + (hasnew ? "1" : "0") + "}");
+}
+
+// 后台下载任务：读 Content-Length 定长流式写入 OTA 分区，完成后 4s 重启
+static void fwTask(void*) {
+  gFwState = FW_DL; gFwPct = 0; gFwErr = "";
+  WiFiClientSecure cl;
+  HTTPClient http;
+  String latest = fwFetchLatest();
+  String sha = latest; int sp = sha.indexOf(' ');
+  if (sp > 0) sha.remove(sp);
+  bool ok = false;
+  if (sha.length() != 7) {
+    gFwErr = "版本号获取失败";
+  } else if (fwHttpBegin(cl, http, String("https://cdn.jsdelivr.net/gh/") + FW_REPO + "@" + sha + "/web/firmware.bin") &&
+             http.GET() == 200) {
+    int len = http.getSize();
+    if (len <= 0) {
+      gFwErr = "固件大小未知";
+    } else if (!Update.begin(len, U_FLASH)) {
+      gFwErr = Update.errorString();
+    } else {
+      Stream* s = http.getStreamPtr();
+      uint8_t buf[1024];
+      int got = 0;
+      while (got < len) {
+        int n = s->readBytes(buf, (size_t)min(len - got, (int)sizeof(buf)));
+        if (n <= 0) { gFwErr = "下载中断"; break; }
+        if (Update.write(buf, n) != (size_t)n) { gFwErr = "写入失败"; break; }
+        got += n;
+        gFwPct = got * 100 / len;
+      }
+      if (got >= len && Update.end(true)) ok = true;   // true = 校验并设为启动分区
+      else if (gFwErr.length() == 0) gFwErr = Update.errorString();
+    }
+  } else if (gFwErr.length() == 0) {
+    gFwErr = "固件下载失败";
+  }
+  http.end();
+  if (ok) {
+    gFwState = FW_OK;
+    vTaskDelay(pdMS_TO_TICKS(4000));   // 让浏览器轮询到完成状态
+    ESP.restart();
+  } else {
+    Update.abort();
+    gFwState = FW_FAIL;
+  }
+  vTaskDelete(NULL);
+}
+
+static void handleFwUpdate(WebServer& server) {
+  if (gFwState == FW_DL) {
+    server.send(200, "application/json", "{\"ok\":0,\"err\":\"已有更新在进行\"}");
+    return;
+  }
+  if (xTaskCreate(fwTask, "fwota", 8192, NULL, 1, NULL) != pdPASS) {
+    server.send(200, "application/json", "{\"ok\":0,\"err\":\"任务创建失败\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"ok\":1}");
+}
+
+static void handleFwStatus(WebServer& server) {
+  server.send(200, "application/json",
+              String("{\"state\":") + gFwState + ",\"pct\":" + gFwPct +
+              ",\"err\":\"" + gFwErr + "\"}");
+}
+
+// ---- /update：网页 OTA 刷机（流式写入 OTA 分区，校验通过后自动重启） ----
+static void handleOtaData(WebServer& server) {
+  HTTPUpload& up = server.upload();
+  if (up.status == UPLOAD_FILE_START) {
+    Serial.printf("[ota] start: %s\n", up.filename.c_str());
+    Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+  } else if (up.status == UPLOAD_FILE_WRITE) {
+    Update.write(up.buf, up.currentSize);
+  } else if (up.status == UPLOAD_FILE_END) {
+    bool ok = Update.end(true);   // true = 校验后设为启动分区
+    Serial.printf("[ota] end: %s (%u bytes)\n", ok ? "OK" : Update.errorString(), up.totalSize);
+  }
+}
+
+static void handleOtaUpload(WebServer& server) {
+  if (Update.hasError()) {
+    String err = Update.errorString();
+    Update.abort();
+    server.send(500, "application/json", "{\"ok\":0,\"err\":\"" + err + "\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"ok\":1}");
+  delay(1200);          // 让响应冲刷到浏览器
+  ESP.restart();        // 切换到新固件
+}
+
 static void registerRoutes(WebServer& server, AppConfig& cfg, String ipText) {
   server.on("/", HTTP_GET, [&, ipText]() {
     server.send(200, "text/html; charset=utf-8", renderPage(cfg, ipText));
@@ -521,6 +714,20 @@ static void registerRoutes(WebServer& server, AppConfig& cfg, String ipText) {
   });
   server.on("/api/theme", HTTP_POST, [&]() {
     handleApiTheme(server, cfg);
+  });
+  server.on("/update", HTTP_POST, [&]() {
+    handleOtaUpload(server);
+  }, [&]() {
+    handleOtaData(server);
+  });
+  server.on("/api/fwcheck", HTTP_GET, [&]() {
+    handleFwCheck(server);
+  });
+  server.on("/api/fwupdate", HTTP_POST, [&]() {
+    handleFwUpdate(server);
+  });
+  server.on("/api/fwstatus", HTTP_GET, [&]() {
+    handleFwStatus(server);
   });
   server.onNotFound([&]() {
     server.sendHeader("Location", "/", true);

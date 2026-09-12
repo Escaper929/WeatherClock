@@ -37,8 +37,13 @@ jobs:
       - name: Install PlatformIO
         run: pip install -q platformio
 
+      - name: Generate firmware version
+        run: echo "FW_VER=${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+
       - name: Build ESP32-C3 firmware
-        run: pio run -e esp32c3
+        run: |
+          printf '#define FW_VERSION "%s"\n' "$FW_VER" > src/FwVersion.h
+          pio run -e esp32c3
 
       - name: Stage web assets
         run: |
@@ -53,7 +58,7 @@ jobs:
           else
             echo "ERROR: boot_app0.bin not found in PlatformIO packages"; exit 1
           fi
-          echo "${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" > web/version.txt
+          echo "$FW_VER" > web/version.txt
 
       # 把固件 bin 提交回仓库，jsDelivr 镜像才能代理到（国内访问稳定）
       - name: Commit firmware binaries to repo

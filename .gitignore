@@ -3,3 +3,4 @@
 .vscode/extensions.json
 *.pyc
 .DS_Store
+src/FwVersion.h
