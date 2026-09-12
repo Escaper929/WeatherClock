@@ -12,6 +12,7 @@
 #include "Weather.h"
 #include "Quote.h"
 #include "Screen.h"
+#include "Theme.h"
 #include "Portal.h"
 #include <Arduino.h>
 #include <WiFi.h>
@@ -56,7 +57,6 @@ static void fetchQuoteSafe() {
   if (fetchQuote(cfg, q)) {
     quote = q;
     quoteValid = true;
-    renderQuote(quote);
   }
   lastQuote = millis();
 }
@@ -92,9 +92,7 @@ static void postConnectInit() {
   renderStatus("Loading weather...");
   Serial.printf("[geo] use host='%s' city=%s\n", cfg.qweather_host.c_str(), cfg.city_name.c_str());
   fetchWeatherSafe();
-  if (weatherValid) renderWeather(weather);  // 开机即显示天气，不必等下一个拉取周期
-  renderClock(nowSegments(), true);
-  fetchQuoteSafe();   // 行情首拉（成功后 renderQuote 自行绘制）
+  fetchQuoteSafe();   // 行情首拉（主题系统在下一个 tick 自动绘出）
 }
 
 // Improv 配网成功回调（此时 WiFi 已由库连接成功）
@@ -212,7 +210,7 @@ void setup() {
   }
 
   bool hasWifi = loadConfig(cfg);
-  screenSetCity(cfg.city_name);   // 顶部显示城市名
+  themeApply((DisplayTheme)cfg.theme);   // 恢复上次选择的主题（非法值在 themeApply 内回退 Modern）
 
   // 按住 BOOT 上电 -> softAP 门户兜底（阻塞）
   if (digitalRead(PIN_BOOT_BTN) == LOW) {
@@ -279,19 +277,26 @@ void loop() {
     now = millis();  // 初始化耗时数秒，刷新时间基准，避免 now-lastFetch 无符号下溢导致立即重拉
   }
 
-  // 1. 时钟：每 500ms 切换冒号（擦除-重绘策略，不再 fillScreen）
+  // 1. 时钟/主题：每 500ms 切换冒号，构建数据视图交给当前主题绘制
   if (now - lastBlink >= 500) {
     lastBlink = now;
     blinkOn = !blinkOn;
-    renderClock(nowSegments(), blinkOn);
+    struct tm tmi;
+    if (!getLocalTime(&tmi, 0)) {   // 未对时：至少让主题画个界面骨架
+      memset(&tmi, 0, sizeof tmi);
+      tmi.tm_mday = 1;
+    }
+    UiData d;
+    d.dt      = tmi;
+    d.city    = cfg.city_name.c_str();
+    d.weather = weatherValid ? &weather : nullptr;
+    d.quote   = (cfg.quote_mode > 0 && quoteValid) ? &quote : nullptr;
+    themeTick(d, blinkOn);
   }
 
-  // 2. 天气：定期拉取
+  // 2. 天气：定期拉取（主题在下一个 tick 依据 key 变化自动重绘）
   if (now - lastFetch >= WEATHER_FETCH_INTERVAL_SEC * 1000UL) {
-    if (wifiIsConnected()) {
-      fetchWeatherSafe();
-      if (weatherValid) renderWeather(weather);
-    }
+    if (wifiIsConnected()) fetchWeatherSafe();
   }
 
   // 2b. 行情：每 10 分钟拉取

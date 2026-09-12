@@ -21,6 +21,9 @@ struct AppConfig {
   String quote_label;           // 自定义时的显示标签（预设忽略，用内置名）
   String quote_url;             // 自定义数据源完整 URL（https://...）
   String quote_path;            // 自定义 JSON 价格字段路径，如 data.f43 或 price
+
+  // ---- 显示风格（Theme.h 的 DisplayTheme；只存 id，非法值回退 Modern） ----
+  uint8_t theme = 0;
 };
 
 // 载入配置，返回是否有效
@@ -29,5 +32,7 @@ bool loadConfig(AppConfig& cfg);
 bool saveConfig(const AppConfig& cfg);
 // 单独保存解析出的 location_id（用于城市解析成功后回写）
 bool saveLocationId(const String& id);
+// 单独保存主题 id（网页即时切换用，不重启）
+bool saveTheme(uint8_t themeId);
 // 清除全部配置（复位设备）
 bool clearConfig();

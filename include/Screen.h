@@ -1,30 +1,17 @@
 // ============================================================================
-//  Screen.h - ST7789 240x240 屏幕渲染（LovyanGFX）
+//  Screen.h - ST7789 240x240 屏幕驱动与基础服务
+//  主界面绘制已迁移至多主题系统（include/Theme.h + src/themes/），
+//  本头文件只保留硬件层服务。
 // ============================================================================
 #pragma once
 #include <Arduino.h>
-#include "Weather.h"
-#include "Quote.h"
 
-// 初始化屏幕与背光，显示开机画面，返回是否成功
+//初始化屏幕与背光，显示开机画面，返回是否成功
 bool screenInit();
 
 // 设置背光亮度 0-255
 void screenSetBrightness(uint8_t v);
 
-// 主界面：绘制时钟（时间 + 日期）与天气区
-// timeSegs: 北京时间戳（目前由 nowSegments 提供）
-// blinkColon: true 时冒号亮起，false 时熄灭（用于闪烁）
-void renderClock(unsigned long timeSegs, bool blinkColon);
-
-// 仅刷新天气信息区
-void renderWeather(const WeatherData& w);
-
-// 刷新行情行（时钟与天气卡片之间）；q.ok=false 时清空该行
-void renderQuote(const QuoteData& q);
-
-// 设置顶部显示的城市名（配置页保存后由 main 调用）
-void screenSetCity(const String& city);
-
 // 在中间显示临时状态文字（如“连接中…”“无 WiFi”）
+// 内部 fillScreen 并递增主题 epoch（保证回到主界面时全屏重绘）
 void renderStatus(const char* msg, const String& sub = String());

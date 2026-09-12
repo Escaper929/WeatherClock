@@ -2,6 +2,7 @@
 //  AppConfig.cpp - NVS 配置存储实现
 // ============================================================================
 #include "AppConfig.h"
+#include "Theme.h"
 #include <Preferences.h>
 
 static Preferences prefs;
@@ -33,10 +34,15 @@ bool loadConfig(AppConfig& cfg) {
   cfg.quote_label = prefsGet("ql");
   cfg.quote_url   = prefsGet("qu");
   cfg.quote_path  = prefsGet("qp");
+  cfg.theme = prefs.getUChar("theme", 0);
+  if (!themeIdValid(cfg.theme)) cfg.theme = 0;   // 非法值（含已删除主题旧 id）回退 Modern
 
   Serial.printf("[cfg] loaded: ssid=%s keylen=%d host='%s' city=%s quote=%d\n",
                 cfg.wifi_ssid.c_str(), cfg.qweather_key.length(),
                 cfg.qweather_host.c_str(), cfg.city_name.c_str(), cfg.quote_mode);
+  Serial.print("[cfg] city bytes:");
+  for (unsigned i = 0; i < cfg.city_name.length(); i++) Serial.printf(" %02X", cfg.city_name[i]);
+  Serial.println();
 
   prefs.end();
   return cfg.valid;
@@ -58,6 +64,7 @@ bool saveConfig(const AppConfig& cfg) {
   prefs.putString("ql", cfg.quote_label);
   prefs.putString("qu", cfg.quote_url);
   prefs.putString("qp", cfg.quote_path);
+  prefs.putUChar("theme", cfg.theme);
   String back = prefs.getString("qhost", "<err>");
   Serial.printf("[nvs] putString(qhost) -> %u bytes; readback='%s'\n", (unsigned)wh, back.c_str());
   prefs.end();
@@ -69,6 +76,14 @@ bool saveLocationId(const String& id) {
   prefs.putString("loc", id);
   prefs.end();
   return true;
+}
+
+bool saveTheme(uint8_t themeId) {
+  if (!themeIdValid(themeId)) themeId = 0;
+  if (!prefs.begin(NS, false)) return false;
+  bool ok = prefs.putUChar("theme", themeId) != 0;
+  prefs.end();
+  return ok;
 }
 
 bool clearConfig() {

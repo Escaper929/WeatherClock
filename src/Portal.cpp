@@ -9,6 +9,7 @@
 #include "BoardPins.h"
 #include "Weather.h"
 #include "Quote.h"
+#include "Theme.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -84,6 +85,18 @@ static String renderQmOptions(int cur) {
   return s;
 }
 
+// 显示风格选项（5 主题卡片，当前项带选中态；点击即经 /api/theme 生效）
+static String renderThemeOptions(uint8_t cur) {
+  String s;
+  for (int i = 0; i < THEME_COUNT; i++) {
+    DisplayTheme t = (DisplayTheme)i;
+    s += "<div class='th" + String(i == cur ? " sel" : "") + "' data-t='" + String(i) +
+         "' data-n='" + themeName(t) + "' onclick='pickTheme(this)'>"
+         "<b>" + themeName(t) + "</b><span class='d'>" + themeDesc(t) + "</span></div>";
+  }
+  return s;
+}
+
 // 生成 web 页面（占位符在 renderPage 中替换）
 static const char PAGE_HTML[] PROGMEM = R"HTML(
 <!DOCTYPE html><html lang='zh'><head>
@@ -118,6 +131,13 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 #res{display:none;margin-top:10px;font-size:12px;line-height:1.6;padding:10px;border-radius:8px;background:var(--in);border:1px solid var(--line);white-space:pre-wrap;color:var(--txt)}
 #res.ok{border-color:#3a6}
 .tips{font-size:11px;color:var(--dim);margin-top:12px;line-height:1.6}
+/* 显示风格主题卡片 */
+.th{display:flex;align-items:center;gap:10px;padding:9px 11px;margin-top:6px;border:1px solid var(--line);border-radius:8px;background:var(--in);cursor:pointer}
+.th b{font-size:13px;min-width:58px}
+.th .d{font-size:11px;color:var(--dim);flex:1}
+.th.sel{border-color:var(--acc);background:#122a20}
+.th.sel b{color:var(--acc)}
+#thres{font-size:11px;color:var(--acc);margin-top:6px;min-height:14px}
 </style></head><body><div class='wrap'>
 <div class='card'>
 <h1>☀ WeatherClock</h1><small>$IP$</small>
@@ -161,6 +181,10 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 <label>显示标签（如 金价 / 汇率 / 股价）</label>
 <input name='ql' value='$QL$' placeholder='金价'>
 </div>
+<label>显示风格（点击即切换，屏幕立即刷新，无需重启）</label>
+<input type='hidden' name='th' id='th' value='$THV$'>
+<div id='themes'>$THEMES$</div>
+<div id='thres'></div>
 <button class='btn' type='button' onclick='testApi()'>测试 API · 刷新预览</button>
 <button class='btn btn2' type='submit'>保存并重启</button>
 <div class='tips'>「测试 API」会用当前填写的 Key / Host / 城市真实请求一次和风接口，并把结果渲染到上方预览，确认无误后再点「保存并重启」。</div>
@@ -186,6 +210,17 @@ syncCity();
 function q(n){var e=document.getElementById('cf').elements[n];return e?e.value.trim():'';}
 function toggleQ(){document.getElementById('qcustom').style.display=(q('qm')==='3')?'block':'none';}
 toggleQ();
+function pickTheme(el){
+  document.querySelectorAll('.th').forEach(function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  document.getElementById('th').value=el.dataset.t;
+  var res=document.getElementById('thres');
+  res.textContent='正在切换到 '+el.dataset.n+' …';
+  fetch('/api/theme',{method:'POST',body:'t='+el.dataset.t,headers:{'Content-Type':'application/x-www-form-urlencoded'}})
+  .then(function(r){return r.json();})
+  .then(function(j){res.textContent=j.ok?('✓ 已切换到 '+el.dataset.n+'，屏幕已刷新'):'✗ 切换失败';})
+  .catch(function(e){res.textContent='✗ 切换失败：'+e;});
+}
 function testApi(){
   var res=document.getElementById('res');
   res.style.display='block';res.className='';res.textContent='正在请求设备真实拉取数据…';
@@ -235,6 +270,8 @@ static String renderPage(const AppConfig& cfg, const String& ipText) {
   s.replace("$QU$", cfg.quote_url);
   s.replace("$QP$", cfg.quote_path);
   s.replace("$QL$", cfg.quote_label);
+  s.replace("$THEMES$", renderThemeOptions(cfg.theme));
+  s.replace("$THV$", String(cfg.theme));
   return s;
 }
 
@@ -308,6 +345,20 @@ static void handleApiPreview(WebServer& server) {
   server.send(200, "application/json; charset=utf-8", okBody);
 }
 
+// ---- /api/theme：主题即时切换（保存 NVS + 立即应用，不重启） ----
+static void handleApiTheme(WebServer& server, AppConfig& cfg) {
+  int t = server.arg("t").toInt();
+  if (!themeIdValid((uint8_t)t)) {
+    server.send(400, "application/json; charset=utf-8", "{\"ok\":0,\"err\":\"bad theme id\"}");
+    return;
+  }
+  cfg.theme = (uint8_t)t;
+  saveTheme(cfg.theme);                 // 持久化，重启后保留
+  themeApply((DisplayTheme)t);          // 下一次 themeTick 全屏重绘为新主题
+  Serial.printf("[theme] switch -> %s (%d)\n", themeName((DisplayTheme)t), t);
+  server.send(200, "application/json; charset=utf-8", "{\"ok\":1}");
+}
+
 // /save 处理（两种模式共用）
 static void handleSave(WebServer& server, AppConfig& cfg) {
   cfg.valid = true;
@@ -330,6 +381,11 @@ static void handleSave(WebServer& server, AppConfig& cfg) {
   cfg.quote_url    = server.arg("qu"); cfg.quote_url.trim();
   cfg.quote_path   = server.arg("qp"); cfg.quote_path.trim();
   cfg.quote_label  = server.arg("ql"); cfg.quote_label.trim();
+  // 显示风格（隐藏域随表单提交；非法值回退 Modern）
+  {
+    int th = server.arg("th").toInt();
+    cfg.theme = themeIdValid((uint8_t)th) ? (uint8_t)th : (uint8_t)THEME_MODERN;
+  }
   // 解析经纬度（若填写）
   String g = server.arg("g");
   g.trim();
@@ -375,6 +431,9 @@ static void registerRoutes(WebServer& server, AppConfig& cfg, String ipText) {
   });
   server.on("/api/preview", HTTP_POST, [&]() {
     handleApiPreview(server);
+  });
+  server.on("/api/theme", HTTP_POST, [&]() {
+    handleApiTheme(server, cfg);
   });
   server.onNotFound([&]() {
     server.sendHeader("Location", "/", true);
