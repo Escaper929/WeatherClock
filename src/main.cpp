@@ -22,9 +22,12 @@ static AppConfig   cfg;
 static WeatherData weather;
 static bool        weatherValid = false;
 static unsigned    lastFetch    = 0;
-static QuoteData   quote;
-static bool        quoteValid   = false;
-static unsigned    lastQuote    = 0;
+static QuoteData   quotes[QUOTE_SLOTS];
+static bool        quoteValid[QUOTE_SLOTS];
+static int         quoteSlotN = 0;    // 有效行情条数
+static int         quoteShowIdx = 0;  // 当前屏幕显示的行情下标（轮播用）
+static unsigned    lastQuote  = 0;
+static unsigned    lastQuoteRotate = 0;
 static const unsigned long QUOTE_INTERVAL_MS = 10UL * 60 * 1000;  // 行情 10 分钟刷新
 static unsigned    lastBlink    = 0;
 static bool        blinkOn      = true;
@@ -52,12 +55,13 @@ static void fetchWeatherSafe() {
 }
 
 static void fetchQuoteSafe() {
-  if (cfg.quote_mode <= 0) { lastQuote = millis(); return; }
-  QuoteData q;
-  if (fetchQuote(cfg, q)) {
-    quote = q;
-    quoteValid = true;
+  quoteSlotN = quoteSlotCount(cfg);
+  for (int i = 0; i < quoteSlotN; i++) {   // 批量拉取本次轮播的所有行情
+    QuoteData q;
+    quoteValid[i] = fetchQuote(cfg, i, q);
+    if (quoteValid[i]) quotes[i] = q;
   }
+  if (quoteShowIdx >= quoteSlotN) quoteShowIdx = quoteSlotN > 0 ? quoteSlotN - 1 : 0;
   lastQuote = millis();
 }
 
@@ -286,11 +290,20 @@ void loop() {
       memset(&tmi, 0, sizeof tmi);
       tmi.tm_mday = 1;
     }
+    // 行情轮播：多行情时每配置间隔（秒）切换到下一个待显示项
+    unsigned long rotateMs = (unsigned long)cfg.quote_rotate_s * 1000UL;
+    if (quoteSlotN > 1 && now - lastQuoteRotate >= rotateMs) {
+      lastQuoteRotate = now;
+      for (int step = 0; step < quoteSlotN; step++) {
+        quoteShowIdx = (quoteShowIdx + 1) % quoteSlotN;
+        if (quoteValid[quoteShowIdx]) break;   // 跳到下一个有效项；全无效时停在原处
+      }
+    }
     UiData d;
     d.dt      = tmi;
     d.city    = cfg.city_name.c_str();
     d.weather = weatherValid ? &weather : nullptr;
-    d.quote   = (cfg.quote_mode > 0 && quoteValid) ? &quote : nullptr;
+    d.quote   = (quoteSlotN > 0 && quoteValid[quoteShowIdx]) ? &quotes[quoteShowIdx] : nullptr;
     themeTick(d, blinkOn);
   }
 

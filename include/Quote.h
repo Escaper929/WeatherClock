@@ -18,5 +18,8 @@ struct QuoteData {
   String unit;        // 单位，如 "元/克" / "美元/桶"
 };
 
-// 拉取一次行情。quote_mode == 0 时直接返回 false
-bool fetchQuote(const AppConfig& cfg, QuoteData& out);
+// 有效行情条目数（<= QUOTE_SLOTS；槽位无配置或不可用则返回实际启用数）
+int quoteSlotCount(const AppConfig& cfg);
+
+// 拉取第 index 个（0 起）行情条目。该槽位未启用时直接返回 false
+bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out);

@@ -78,21 +78,38 @@ static String jsonEsc(const String& s) {
   return r;
 }
 
-// 行情源下拉选项
-static String renderQmOptions(int cur) {
-  struct O { int v; const char* t; };
-  static const O opts[] = {
-    {0, "不显示"},
-    {1, "金价（积存金参考 · Au99.99 元/克）"},
-    {2, "布伦特原油（美元/桶）"},
-    {4, "沪铜（上期所主力连续 · 元/吨）"},
-    {3, "自定义 JSON 数据源"},
-  };
-  String s;
-  for (auto& o : opts) {
-    s += "<option value='" + String(o.v) + "'" + (o.v == cur ? " selected" : "") +
-         ">" + o.t + "</option>";
+// 行情轮播条目渲染（每条：类型下拉 + 自定义项；供网页列表 builder 初始化用）
+static String renderQSlotRow(const QuoteSlot& s) {
+  const char* label[] = {"不显示","金价（Au99.99 · 元/克）","布伦特原油（美元/桶）",
+                         "自定义 JSON 数据源","沪铜（上期所 · 元/吨）"};
+  static const int types[] = {0,1,2,3,4};
+  const char* sel  = "";
+  String opts;
+  for (int i = 0; i < 5; i++) {
+    bool on = (types[i] == s.type);
+    if (on) sel = " selected";
+    opts += "<option value='" + String(types[i]) + "'" + (on ? " selected" : "") +
+            ">" + label[i] + "</option>";
   }
+  String row = "<div class='qrow'><div class='qhead'><select onchange='qType(this)'>" +
+               opts + "</select><button type='button' class='qdel' onclick='delQRow(this)'>移除</button></div>";
+  bool cus = (s.type == 3);
+  row += "<div class='qcus' style='display:" + String(cus ? "block" : "none") + "'>";
+  String u = jsonEsc(s.url), p = jsonEsc(s.path), l = jsonEsc(s.label);
+  row += "<label>数据源 URL（https://…，返回 JSON）</label>";
+  row += String("<input placeholder='https://example.com/api/quote' value='") + u +
+         "' oninput='saveQList()'>" + "<label>价格字段 JSON 路径（点分级，如 data.f43）</label>";
+  row += String("<input placeholder='data.f43' value='") + p + "' oninput='saveQList()'>" +
+         "<label>显示标签（如 金价 / 汇率 / 股价）</label>";
+  row += String("<input placeholder='金价' value='") + l + "' oninput='saveQList()'>";
+  row += "</div></div>";
+  return row;
+}
+
+static String renderQSlots(const AppConfig& cfg) {
+  String s;
+  for (int i = 0; i < cfg.quote_slot_count && i < QUOTE_SLOTS; i++)
+    if (cfg.quote_slots[i].type > 0) s += renderQSlotRow(cfg.quote_slots[i]);
   return s;
 }
 
@@ -143,9 +160,21 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 #scr .pqrow .qp{color:#969da8;font-weight:700;margin:0 4px}
 #scr .pqrow .up{color:#c68670;font-weight:700}
 #scr .pqrow .dn{color:#749c94;font-weight:700}
+/* 行情轮播列表 builder */
+.qrow{border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px;background:var(--in)}
+.qhead{display:flex;gap:6px;align-items:center}
+.qhead select{flex:1}
+.qdel{width:auto;flex:none;padding:7px 11px;border:0;border-radius:7px;background:#a74632;color:#fff;cursor:pointer;font-size:12px}
+.qcus{margin-top:6px}
+.qcus input{margin-top:6px}
+.qadd{margin-top:8px;background:#3a6}
 #res{display:none;margin-top:10px;font-size:12px;line-height:1.6;padding:10px;border-radius:8px;background:var(--in);border:1px solid var(--line);white-space:pre-wrap;color:var(--txt)}
 #res.ok{border-color:#3a6}
 .tips{font-size:11px;color:var(--dim);margin-top:12px;line-height:1.6}
+details.hint{margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--in);padding:6px 10px;font-size:12px}
+details.hint summary{cursor:pointer;color:var(--acc);font-weight:600;user-select:none}
+details.hint .hintb{margin-top:8px;color:var(--dim);line-height:1.7;font-size:12px}
+details.hint .hintb b{color:var(--txt)}
 /* 显示风格主题卡片 */
 .th{display:flex;align-items:center;gap:10px;padding:9px 11px;margin-top:6px;border:1px solid var(--line);border-radius:8px;background:var(--in);cursor:pointer}
 .th b{font-size:13px;min-width:58px}
@@ -263,6 +292,13 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 <input name='s' value='$S$' placeholder='例如 MyWiFi'>
 <label>WiFi 密码（留空则保持不变）</label>
 <input type='password' name='p' placeholder='WiFi 密码'>
+<details class='hint'><summary>设备换地方 / 重新连接新 WiFi 怎么操作？</summary>
+<div class='hintb'>
+<b>方式一（无需数据线）：</b>断开电源 → <b>按住 BOOT 键</b>不放的同时重新上电，保持约 1~2 秒松开。设备会启动热点 <b>WeatherClock-XXXX</b>，用手机连上该热点，浏览器打开 <b>http://192.168.4.1</b>，在此页填新的 WiFi 名称/密码并保存。<br>
+<b>方式二（USB 串口）：</b>用数据线连接设备，打开 Web 烧录页面并接入串口，它会重新下发 WiFi 账号密码。<br>
+<b>提示：</b>仅当网络临时断线时，设备会自动重连已保存的 WiFi，无需任何操作；以上两种方式用于彻底更换 WiFi 网络。
+</div>
+</details>
 <label>和风天气 API Key（凭据选 API KEY 类型）</label>
 <input name='k' value='$K$' placeholder='申请于 https://dev.qweather.com'>
 <label>和风 API Host（控制台-开发者信息，如 abc123.re.qweatherapi.com）</label>
@@ -273,16 +309,13 @@ input,select{width:100%;padding:9px;border-radius:7px;border:1px solid var(--lin
 </div>
 <label>时区</label>
 <select name='z'>$TZOPT$</select>
-<label>行情显示（时钟下方一行，10 分钟刷新）</label>
-<select name='qm' id='qm' onchange='toggleQ()'>$QMOPT$</select>
-<div id='qcustom'>
-<label>数据源 URL（https://…，返回 JSON）</label>
-<input name='qu' value='$QU$' placeholder='https://example.com/api/quote'>
-<label>价格字段 JSON 路径（点分级，如 data.f43）</label>
-<input name='qp' value='$QP$' placeholder='data.f43'>
-<label>显示标签（如 金价 / 汇率 / 股价）</label>
-<input name='ql' value='$QL$' placeholder='金价'>
-</div>
+<label>行情轮播（屏幕底部一行：所选条目自动循环切换显示，10 分钟刷新数据）</label>
+<div id='qslot'>$QSLOTS$</div>
+<div class='row'><div style='flex:0 0 50%'><label>切换间隔（秒，2–60）</label>
+<input type='number' name='qr' min='2' max='60' value='$QR$'></div></div>
+<button type='button' class='btn qadd' onclick='addQSlot()'>+ 添加行情条目</button>
+<input type='hidden' name='qlist' id='qlist'>
+<div class='tips'>从下拉选择要轮播的行情（金价 / 布油 / 沪铜），可添加多条，保存后按顺序自动轮流显示；「自定义 JSON」需填 URL 与价格字段路径。</div>
 <label>显示风格（点击即切换，屏幕立即刷新，无需重启）</label>
 <input type='hidden' name='th' id='th' value='$THV$'>
 <div id='themes'>$THEMES$</div>
@@ -317,8 +350,48 @@ var _ci=document.getElementById('cf').elements['c'];
 if(_ci)_ci.addEventListener('input',syncCity);
 syncCity();
 function q(n){var e=document.getElementById('cf').elements[n];return e?e.value.trim():'';}
-function toggleQ(){document.getElementById('qcustom').style.display=(q('qm')==='3')?'block':'none';}
-toggleQ();
+/* 行情轮播列表 builder */
+var QTYPE=[['0','不显示'],['1','金价（Au99.99 · 元/克）'],['2','布伦特原油（美元/桶）'],['4','沪铜（上期所 · 元/吨）'],['3','自定义 JSON 数据源']];
+function qRowHtml(t,url,path,label){
+  var r=document.createElement('div');r.className='qrow';
+  var hd=document.createElement('div');hd.className='qhead';
+  var s='<select onchange="qType(this)">',x;
+  for(x in QTYPE) s+="<option value='"+QTYPE[x][0]+"'"+(String(QTYPE[x][0])==String(t)?' selected':'')+">"+QTYPE[x][1]+"</option>";
+  s+='</select>';
+  hd.innerHTML=s+"<button type='button' class='qdel' onclick='delQRow(this)'>移除</button>";
+  r.appendChild(hd);
+  var cus=document.createElement('div');cus.className='qcus';cus.style.display=(String(t)==='3')?'block':'none';
+  cus.innerHTML="<label>数据源 URL（https://…，返回 JSON）</label>"+
+    "<input placeholder='https://example.com/api/quote' value='"+esc(url)+"' oninput='saveQList()'>"+
+    "<label>价格字段 JSON 路径（点分级，如 data.f43）</label>"+
+    "<input placeholder='data.f43' value='"+esc(path)+"' oninput='saveQList()'>"+
+    "<label>显示标签（如 金价 / 汇率 / 股价）</label>"+
+    "<input placeholder='金价' value='"+esc(label)+"' oninput='saveQList()'>";
+  r.appendChild(cus);
+  return r;
+}
+function addQSlot(t,url,path,label){
+  document.getElementById('qslot').appendChild(qRowHtml(t||'0',url||'',path||'',label||''));
+  saveQList();
+}
+function delQRow(btn){btn.closest('.qrow').remove();saveQList();}
+function qType(sel){
+  var r=sel.closest('.qrow');
+  r.querySelector('.qcus').style.display=(sel.value==='3')?'block':'none';
+  saveQList();
+}
+function saveQList(){
+  var arr=[];document.querySelectorAll('#qslot .qrow').forEach(function(r){
+    var t=r.querySelector('select').value;
+    if(t==='0')return;
+    var inps=r.querySelectorAll('.qcus input');
+    if(t==='3')arr.push('3;;'+inps[0].value.trim()+';;'+inps[1].value.trim()+';;'+inps[2].value.trim());
+    else arr.push(t);
+  });
+  document.getElementById('qlist').value=arr.join('\n');
+}
+if(!document.getElementById('qslot').children.length)addQSlot();   // 无已配置条目时默认给一空行
+document.getElementById('cf').addEventListener('submit',function(){saveQList();});
 function pickTheme(el){
   document.querySelectorAll('.th').forEach(function(x){x.classList.remove('sel');});
   el.classList.add('sel');
@@ -334,9 +407,10 @@ function pickTheme(el){
 function testApi(){
   var res=document.getElementById('res');
   res.style.display='block';res.className='';res.textContent='正在请求设备真实拉取数据…';
+  saveQList();
   var body=new URLSearchParams();
   body.append('k',q('k'));body.append('h',q('h'));body.append('c',q('c'));body.append('g',q('g'));
-  body.append('qm',q('qm'));body.append('qu',q('qu'));body.append('qp',q('qp'));body.append('ql',q('ql'));
+  body.append('qlist',document.getElementById('qlist').value);
   fetch('/api/preview',{method:'POST',body:body,headers:{'Content-Type':'application/x-www-form-urlencoded'}})
   .then(function(r){return r.json();})
   .then(function(j){
@@ -414,10 +488,8 @@ static String renderPage(const AppConfig& cfg, const String& ipText) {
   s.replace("$C$", cfg.city_name);
   s.replace("$G$", latlon);
   s.replace("$TZOPT$", renderTzOptions(cfg.timezone));
-  s.replace("$QMOPT$", renderQmOptions(cfg.quote_mode));
-  s.replace("$QU$", cfg.quote_url);
-  s.replace("$QP$", cfg.quote_path);
-  s.replace("$QL$", cfg.quote_label);
+  s.replace("$QSLOTS$", renderQSlots(cfg));
+  s.replace("$QR$", String(cfg.quote_rotate_s));
   s.replace("$THEMES$", renderThemeOptions(cfg.theme));
   s.replace("$THV$", String(cfg.theme));
   s.replace("$FWV$", FWV_STR);
@@ -445,11 +517,8 @@ static void handleApiPreview(WebServer& server) {
       t.lat = g.substring(co + 1).toFloat();
     }
   }
-  // 行情参数
-  t.quote_mode  = server.arg("qm").toInt();
-  t.quote_url   = server.arg("qu"); t.quote_url.trim();
-  t.quote_path  = server.arg("qp"); t.quote_path.trim();
-  t.quote_label = server.arg("ql"); t.quote_label.trim();
+  // 行情参数：解析轮播列表（预览只测第一个有效条目）
+  parseQuoteSlots(server.arg("qlist"), t);
 
   String okBody, err;
   if (t.qweather_key.length() == 0) {
@@ -478,9 +547,9 @@ static void handleApiPreview(WebServer& server) {
   }
   // 行情测试（独立于天气，无论天气成败都尝试）
   String quoteSeg;
-  if (t.quote_mode > 0) {
+  if (quoteSlotCount(t) > 0) {
     QuoteData qd;
-    if (fetchQuote(t, qd) && qd.ok) {
+    if (fetchQuote(t, 0, qd) && qd.ok) {
       quoteSeg = ",\"qok\":1,\"qlab\":\"" + jsonEsc(qd.label) + "\",\"qprice\":\"" +
                  String(qd.price, qd.decimals) + "\",\"qunit\":\"" + jsonEsc(qd.unit) +
                  "\",\"qpct\":" + String(qd.changePct, 2);
@@ -525,11 +594,9 @@ static void handleSave(WebServer& server, AppConfig& cfg) {
   while (cfg.qweather_host.endsWith("/")) cfg.qweather_host.remove(cfg.qweather_host.length() - 1);
   cfg.city_name    = server.arg("c");
   cfg.timezone     = server.arg("z");   // POSIX 时区串；空则用默认 UTC+8
-  // 行情配置
-  cfg.quote_mode   = server.arg("qm").toInt();
-  cfg.quote_url    = server.arg("qu"); cfg.quote_url.trim();
-  cfg.quote_path   = server.arg("qp"); cfg.quote_path.trim();
-  cfg.quote_label  = server.arg("ql"); cfg.quote_label.trim();
+  // 行情轮播配置
+  parseQuoteSlots(server.arg("qlist"), cfg);
+  cfg.quote_rotate_s = constrain(server.arg("qr").toInt(), 2, 60);
   // 显示风格（隐藏域随表单提交；非法值回退 Modern）
   {
     int th = server.arg("th").toInt();
@@ -564,7 +631,15 @@ static void handleSave(WebServer& server, AppConfig& cfg) {
                 cfg.qweather_host.c_str(), cfg.city_name.c_str(), cfg.timezone.c_str());
   html = F("<html><body style='background:#0b1022;color:#eee;font-family:sans-serif;"
            "text-align:center;padding-top:60px'><h2>✔ 已保存</h2>"
-           "<p>设备即将重启并连接 WiFi…</p></body></html>");
+           "<p>设备即将重启并连接 WiFi…正在等待，稍后自动返回配置页。</p>"
+           "<p><a href='/' style='color:#7ff' onclick='return false'>若长时间无跳转，请点击这里刷新</a></p>"
+           "<script>"
+           "(function(){var t=0;"
+           "function go(){t++;fetch('/',{cache:'no-store'}).then(function(r){"
+           "if(r.ok){location.href='/';}else if(t<50)setTimeout(go,1200);"
+           "}).catch(function(){if(t<50)setTimeout(go,1200);else location.href='/';});}"
+           "go();})();"
+           "</script></body></html>");
   server.send(200, "text/html; charset=utf-8", html);
   delay(600);
   ESP.restart();

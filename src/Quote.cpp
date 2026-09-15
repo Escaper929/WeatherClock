@@ -52,29 +52,38 @@ static bool jsonPathFloat(JsonDocument& doc, const String& path, float& out) {
   return true;
 }
 
-bool fetchQuote(const AppConfig& cfg, QuoteData& out) {
+int quoteSlotCount(const AppConfig& cfg) {
+  int n = 0;
+  for (int i = 0; i < cfg.quote_slot_count && i < QUOTE_SLOTS; i++)
+    if (cfg.quote_slots[i].type > 0) n++;
+  return n;
+}
+
+bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out) {
   out = QuoteData();
-  if (cfg.quote_mode <= 0) return false;
+  if (index < 0 || index >= cfg.quote_slot_count || index >= QUOTE_SLOTS) return false;
+  const QuoteSlot& slot = cfg.quote_slots[index];
+  if (slot.type <= 0) return false;
 
   String host, path, label, unit;
-  bool emPreset = (cfg.quote_mode == 1 || cfg.quote_mode == 2 || cfg.quote_mode == 4);
+  bool emPreset = (slot.type == 1 || slot.type == 2 || slot.type == 4);
 
   if (emPreset) {
-    const Preset& p = PRESETS[cfg.quote_mode];  // 数组边界：有效预设仅 1/2/4
+    const Preset& p = PRESETS[slot.type];  // 数组边界：有效预设仅 1/2/4
     host = EM_HOST;
     path = String("/api/qt/stock/get?secid=") + p.secid + "&fields=f43,f59,f170";
     label = p.label;
     unit  = p.unit;
   } else {
-    if (cfg.quote_url.length() == 0 || cfg.quote_path.length() == 0) {
+    if (slot.url.length() == 0 || slot.path.length() == 0) {
       Serial.println("[quote] custom mode but url/path empty");
       return false;
     }
-    if (!splitUrl(cfg.quote_url, host, path)) {
+    if (!splitUrl(slot.url, host, path)) {
       Serial.println("[quote] bad url");
       return false;
     }
-    label = cfg.quote_label.length() ? cfg.quote_label : "行情";
+    label = slot.label.length() ? slot.label : "行情";
   }
 
   String body;
@@ -106,7 +115,7 @@ bool fetchQuote(const AppConfig& cfg, QuoteData& out) {
     out.decimals  = f59;
   } else {
     float v;
-    if (!jsonPathFloat(doc, cfg.quote_path, v)) {
+    if (!jsonPathFloat(doc, slot.path, v)) {
       Serial.println("[quote] json path not found");
       return false;
     }
@@ -117,7 +126,7 @@ bool fetchQuote(const AppConfig& cfg, QuoteData& out) {
   out.label = label;
   out.unit  = unit;
   out.ok    = true;
-  Serial.printf("[quote] %s %.2f %s (%+.2f%%)\n",
+  Serial.printf("[quote][%d] %s %.2f %s (%+.2f%%)\n", index,
                 label.c_str(), out.price, unit.c_str(), out.changePct);
   return true;
 }

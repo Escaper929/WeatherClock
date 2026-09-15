@@ -14,6 +14,74 @@ String prefsGet(const char* key, const String& dflt = "") {
   return s;
 }
 
+// ---------------------------------------------------------------------------
+// 行情轮播列表 <-> 字符串编码
+//   条目之间 '\n' 分隔；预设条目仅类型数字；自定义条目 "3;;url;;path;;label"。
+// ---------------------------------------------------------------------------
+String serializeQuoteSlots(const AppConfig& cfg) {
+  String out;
+  for (int i = 0; i < cfg.quote_slot_count && i < QUOTE_SLOTS; i++) {
+    const QuoteSlot& s = cfg.quote_slots[i];
+    if (s.type == 0) continue;
+    if (out.length()) out += '\n';
+    if (s.type == 3) {
+      out += "3;;" + s.url + ";;" + s.path + ";;" + s.label;
+    } else {
+      out += String(s.type);
+    }
+  }
+  return out;
+}
+
+bool parseQuoteSlots(const String& src, AppConfig& cfg) {
+  cfg.quote_slot_count = 0;
+  if (src.length() == 0) return true;   // 空 = 关闭行情
+  int start = 0;
+  while (start <= (int)src.length()) {
+    int nl = src.indexOf('\n', start);
+    String item = (nl < 0) ? src.substring(start) : src.substring(start, nl);
+    start = (nl < 0) ? (int)src.length() + 1 : nl + 1;
+    item.trim();
+    if (item.length() == 0) continue;
+    if (cfg.quote_slot_count >= QUOTE_SLOTS) break;
+
+    QuoteSlot& sl = cfg.quote_slots[cfg.quote_slot_count];
+    String typeS = item;
+    int fs = item.indexOf(";;");
+    if (fs >= 0) typeS = item.substring(0, fs);
+    int t = typeS.toInt();
+    if (t == 0 || t > 4) continue;             // 非法类型跳过
+    sl.type = t;
+    if (t == 3) {
+      // 字段：url;;path;;label
+      String rest = item.substring(fs + 2);
+      int p1 = rest.indexOf(";;"), p2 = rest.indexOf(";;", p1 + 2);
+      sl.url   = (p1 < 0) ? "" : rest.substring(0, p1);
+      sl.path  = (p1 < 0) ? "" : (p2 < 0) ? rest.substring(p1 + 2) : rest.substring(p1 + 2, p2);
+      sl.label = (p2 < 0) ? "" : rest.substring(p2 + 2);
+      sl.url.trim(); sl.path.trim(); sl.label.trim();
+      if (sl.url.length() == 0) continue;      // 自定义无 URL 视为无效条目
+    }
+    cfg.quote_slot_count++;
+  }
+  return true;
+}
+
+// 旧版单行情字段（qm/qu/qp/ql）迁移为新的轮播列表首条
+static void migrateLegacyQuote(AppConfig& cfg) {
+  int m = prefs.getInt("qm", 0);
+  if (m <= 0) return;
+  QuoteSlot& s = cfg.quote_slots[0];
+  s.type = m;
+  if (m == 3) {
+    s.url   = prefsGet("qu");
+    s.path  = prefsGet("qp");
+    s.label = prefsGet("ql");
+    if (s.url.length() == 0) return;           // 旧的空自定义配置不迁移
+  }
+  cfg.quote_slot_count = 1;
+}
+
 bool loadConfig(AppConfig& cfg) {
   cfg = AppConfig();
   if (!prefs.begin(NS, true)) return false;   // RO mode
@@ -30,16 +98,21 @@ bool loadConfig(AppConfig& cfg) {
   cfg.lat = prefs.getFloat("lat", 0);
   cfg.lon = prefs.getFloat("lon", 0);
   cfg.timezone   = prefsGet("tz");
-  cfg.quote_mode = prefs.getInt("qm", 0);
-  cfg.quote_label = prefsGet("ql");
-  cfg.quote_url   = prefsGet("qu");
-  cfg.quote_path  = prefsGet("qp");
   cfg.theme = prefs.getUChar("theme", 0);
   if (!themeIdValid(cfg.theme)) cfg.theme = 0;   // 非法值（含已删除主题旧 id）回退 Modern
 
-  Serial.printf("[cfg] loaded: ssid=%s keylen=%d host='%s' city=%s quote=%d\n",
+  // 行情轮播：优先读新列表，兼容旧版单行情字段
+  String ql = prefsGet("qlist");
+  if (ql.length() > 0) {
+    parseQuoteSlots(ql, cfg);
+  } else {
+    migrateLegacyQuote(cfg);
+  }
+  cfg.quote_rotate_s = constrain(prefs.getInt("qrt", 6), 2, 60);
+
+  Serial.printf("[cfg] loaded: ssid=%s keylen=%d host='%s' city=%s quotes=%d\n",
                 cfg.wifi_ssid.c_str(), cfg.qweather_key.length(),
-                cfg.qweather_host.c_str(), cfg.city_name.c_str(), cfg.quote_mode);
+                cfg.qweather_host.c_str(), cfg.city_name.c_str(), cfg.quote_slot_count);
   Serial.print("[cfg] city bytes:");
   for (unsigned i = 0; i < cfg.city_name.length(); i++) Serial.printf(" %02X", cfg.city_name[i]);
   Serial.println();
@@ -60,10 +133,8 @@ bool saveConfig(const AppConfig& cfg) {
   prefs.putFloat("lat", cfg.lat);
   prefs.putFloat("lon", cfg.lon);
   prefs.putString("tz", cfg.timezone);
-  prefs.putInt("qm", cfg.quote_mode);
-  prefs.putString("ql", cfg.quote_label);
-  prefs.putString("qu", cfg.quote_url);
-  prefs.putString("qp", cfg.quote_path);
+  prefs.putString("qlist", serializeQuoteSlots(cfg));
+  prefs.putInt("qrt", cfg.quote_rotate_s);
   prefs.putUChar("theme", cfg.theme);
   String back = prefs.getString("qhost", "<err>");
   Serial.printf("[nvs] putString(qhost) -> %u bytes; readback='%s'\n", (unsigned)wh, back.c_str());
