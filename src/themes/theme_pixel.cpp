@@ -270,6 +270,66 @@ static void drawClockDigits(int h, int m) {
   }
 }
 
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
+static void pixelQuoteRow(const QuoteData& q, int qy) {
+  char pbuf[24];
+  snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
+
+  bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
+  char cbuf[16];
+  int pctW = 0;
+  lcd.setFont(FONT_SM);
+  if (hasPct) {
+    snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
+    pctW = pixNum5x7Width(cbuf, 2);
+  }
+
+  lcd.setFont(FONT_CN);
+  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
+  int priceW = pixNum5x7Width(pbuf, 2);
+  int limit  = hasPct ? (224 - pctW - 8) : 224;
+  int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
+  int gap = 5;
+  if (gaps > 0) {
+    int avail = (limit - 30) - (labelW + priceW + unitW + 8);
+    gap = constrain(avail / gaps, 3, 8);
+  }
+
+  drawCoin(14, qy - 5);                          // 金币图标
+  int x = 30;
+  lcd.setTextSize(1);
+  lcd.setTextDatum(middle_left);
+  if (labelW > 0) {
+    lcd.setFont(FONT_CN);
+    lcd.setTextColor(WHITE, DEEP);
+    drawTextClamped(q.label.c_str(), x, qy, 72);
+    x += labelW + gap;
+  }
+  lcd.setFont(FONT_SM);                          // 价格：金币黄点阵
+  pixNum5x7(x, qy - 7, pbuf, 2, COIN);
+  x += priceW + 6 + (unitW > 0 ? gap : 0);
+  if (unitW > 0) {
+    lcd.setFont(FONT_CN);
+    lcd.setTextColor(DIM_L, DEEP);
+    drawTextClamped(q.unit.c_str(), x, qy, limit - x);
+  }
+  if (hasPct) {
+    pixNum5x7(224 - pctW, qy - 7, cbuf, 2, q.changePct > 0 ? UP : DOWN);
+  }
+}
+
+// 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制（节奏条在底部，用小幅度）
+void pixelQuoteAnim(const UiData& d) {
+  if (!d.quote || !d.quote->ok) return;
+  float p = themeQuoteAnimProgress();
+  const int K = 6;
+  int rise = (int)(K * p);
+  if (rise < 0) return;
+  lcd.fillRect(10, 206, 220, 24 + K, DEEP);
+  pixelQuoteRow(*d.quote, Q_Y + rise);
+}
+
 void pixelTick(const UiData& d, bool blinkColon) {
   uint32_t ep = themeEpoch();
   if (ep != sEpoch) {
@@ -375,56 +435,9 @@ void pixelTick(const UiData& d, bool blinkColon) {
          ((uint32_t)q.label.length() << 20) ^ ((uint32_t)q.unit.length() << 24) ^
          ((uint32_t)q.decimals << 28) ^ 1;
   }
-  if (qk != sQKey) {
+  if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管
     sQKey = qk;
     lcd.fillRect(10, 206, 220, 24, DEEP);          // 条内清底（保留白框）
-    if (qk) {
-      const QuoteData& q = *d.quote;
-      char pbuf[24];
-      snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
-
-      bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
-      char cbuf[16];
-      int pctW = 0;
-      lcd.setFont(FONT_SM);
-      if (hasPct) {
-        snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
-        pctW = pixNum5x7Width(cbuf, 2);
-      }
-
-      lcd.setFont(FONT_CN);
-      int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-      int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
-      int priceW = pixNum5x7Width(pbuf, 2);
-      int limit  = hasPct ? (224 - pctW - 8) : 224;
-      int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
-      int gap = 5;
-      if (gaps > 0) {
-        int avail = (limit - 30) - (labelW + priceW + unitW + 8);
-        gap = constrain(avail / gaps, 3, 8);
-      }
-
-      drawCoin(14, Q_Y - 5);                       // 金币图标
-      int x = 30;
-      lcd.setTextSize(1);
-      lcd.setTextDatum(middle_left);
-      if (labelW > 0) {
-        lcd.setFont(FONT_CN);
-        lcd.setTextColor(WHITE, DEEP);
-        drawTextClamped(q.label.c_str(), x, Q_Y, 72);
-        x += labelW + gap;
-      }
-      lcd.setFont(FONT_SM);                        // 价格：金币黄点阵
-      pixNum5x7(x, Q_Y - 7, pbuf, 2, COIN);
-      x += priceW + 6 + (unitW > 0 ? gap : 0);
-      if (unitW > 0) {
-        lcd.setFont(FONT_CN);
-        lcd.setTextColor(DIM_L, DEEP);
-        drawTextClamped(q.unit.c_str(), x, Q_Y, limit - x);
-      }
-      if (hasPct) {
-        pixNum5x7(224 - pctW, Q_Y - 7, cbuf, 2, q.changePct > 0 ? UP : DOWN);
-      }
-    }
+    if (qk) pixelQuoteRow(*d.quote, Q_Y);
   }
 }

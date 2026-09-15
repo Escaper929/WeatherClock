@@ -61,6 +61,77 @@ static void drawTempSegments(int val, int xRight, int yTop) {
   lcd.drawString("\xC2\xB0""C", xRight + DEG_DX, yTop + DEG_DY);
 }
 
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
+static void modernQuoteRow(const QuoteData& q, int qy) {
+  lcd.fillRect(FOOT_RULE_X, FOOT_RULE_Y, FOOT_RULE_W, 1, HAIRLINE);
+
+  bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
+  char cbuf[16];
+  int pctW = 0;
+  if (hasPct) {
+    snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
+    lcd.setFont(FONT_SMALL);
+    pctW = lcd.textWidth(cbuf);
+  }
+
+  char pbuf[24];
+  snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
+
+  lcd.setFont(FONT_CN);
+  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
+  lcd.setFont(FONT_SMALL);
+  int priceW = lcd.textWidth(pbuf);
+
+  int limit = hasPct ? (Q_X_R - pctW - 10) : Q_X_R;
+  int gaps  = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
+  int gap = 6;
+  if (gaps > 0) {
+    int avail = (limit - Q_X_L) - (labelW + priceW + unitW);
+    gap = constrain(avail / gaps, 2, 6);
+  }
+
+  int x = Q_X_L;
+  lcd.setTextSize(1);
+  lcd.setTextDatum(middle_left);
+
+  if (labelW > 0) {
+    lcd.setFont(FONT_CN);
+    lcd.setTextColor(INK3, BG);
+    lcd.drawString(q.label, x, qy);
+    x += labelW + gap;
+  }
+
+  lcd.setFont(FONT_SMALL);
+  lcd.setTextColor(INK2, BG);
+  lcd.drawString(pbuf, x, qy + 1);
+  x += priceW + (unitW > 0 ? gap : 0);
+
+  if (unitW > 0) {
+    lcd.setFont(FONT_CN);
+    lcd.setTextColor(INK3, BG);
+    lcd.drawString(q.unit, x, qy);
+  }
+
+  if (hasPct) {
+    lcd.setFont(FONT_SMALL);
+    lcd.setTextColor(q.changePct > 0 ? UP : DOWN, BG);
+    lcd.setTextDatum(middle_right);
+    lcd.drawString(cbuf, Q_X_R, qy + 1);
+  }
+}
+
+// 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制（行紧贴底边，用较小幅度）
+void modernQuoteAnim(const UiData& d) {
+  if (!d.quote || !d.quote->ok) return;
+  float p = themeQuoteAnimProgress();
+  const int K = 5;                              // 页脚空间小，幅度收一点
+  int rise = (int)(K * p);
+  if (rise < 0) return;
+  lcd.fillRect(ZONE_QUOTE.x, ZONE_QUOTE.y, ZONE_QUOTE.w, ZONE_QUOTE.h + K, BG);
+  modernQuoteRow(*d.quote, Q_Y + rise);
+}
+
 void modernTick(const UiData& d, bool blinkColon) {
   // 主题激活：全屏重置
   uint32_t ep = themeEpoch();
@@ -164,67 +235,9 @@ void modernTick(const UiData& d, bool blinkColon) {
          ((uint32_t)q.label.length() << 20) ^ ((uint32_t)q.unit.length() << 24) ^
          ((uint32_t)q.decimals << 28) ^ 1;
   }
-  if (qk != sQKey) {
+  if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管
     sQKey = qk;
     lcd.fillRect(ZONE_QUOTE.x, ZONE_QUOTE.y, ZONE_QUOTE.w, ZONE_QUOTE.h, BG);
-    if (qk) {
-      const QuoteData& q = *d.quote;
-      lcd.fillRect(FOOT_RULE_X, FOOT_RULE_Y, FOOT_RULE_W, 1, HAIRLINE);
-
-      bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
-      char cbuf[16];
-      int pctW = 0;
-      if (hasPct) {
-        snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
-        lcd.setFont(FONT_SMALL);
-        pctW = lcd.textWidth(cbuf);
-      }
-
-      char pbuf[24];
-      snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
-
-      lcd.setFont(FONT_CN);
-      int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-      int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
-      lcd.setFont(FONT_SMALL);
-      int priceW = lcd.textWidth(pbuf);
-
-      int limit = hasPct ? (Q_X_R - pctW - 10) : Q_X_R;
-      int gaps  = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
-      int gap = 6;
-      if (gaps > 0) {
-        int avail = (limit - Q_X_L) - (labelW + priceW + unitW);
-        gap = constrain(avail / gaps, 2, 6);
-      }
-
-      int x = Q_X_L;
-      lcd.setTextSize(1);
-      lcd.setTextDatum(middle_left);
-
-      if (labelW > 0) {
-        lcd.setFont(FONT_CN);
-        lcd.setTextColor(INK3, BG);
-        lcd.drawString(q.label, x, Q_Y);
-        x += labelW + gap;
-      }
-
-      lcd.setFont(FONT_SMALL);
-      lcd.setTextColor(INK2, BG);
-      lcd.drawString(pbuf, x, Q_Y + 1);
-      x += priceW + (unitW > 0 ? gap : 0);
-
-      if (unitW > 0) {
-        lcd.setFont(FONT_CN);
-        lcd.setTextColor(INK3, BG);
-        lcd.drawString(q.unit, x, Q_Y);
-      }
-
-      if (hasPct) {
-        lcd.setFont(FONT_SMALL);
-        lcd.setTextColor(q.changePct > 0 ? UP : DOWN, BG);
-        lcd.setTextDatum(middle_right);
-        lcd.drawString(cbuf, Q_X_R, Q_Y + 1);
-      }
-    }
+    if (qk) modernQuoteRow(*d.quote, Q_Y);
   }
 }

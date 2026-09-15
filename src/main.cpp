@@ -33,6 +33,10 @@ static unsigned    lastBlink    = 0;
 static bool        blinkOn      = true;
 static unsigned    lastReconnect= 0;
 
+// 行情上滑动效：缓存当前 UiData 供动画帧使用，过渡期以 ~30ms 高帧率重绘
+static UiData      sUi;
+static unsigned    lastAnim = 0;
+
 // Improv WiFi（USB 串口配网，与浏览器 esp-web-tools 配合）
 static ImprovWiFi improvSerial(&Serial);
 
@@ -295,8 +299,9 @@ void loop() {
     if (quoteSlotN > 1 && now - lastQuoteRotate >= rotateMs) {
       lastQuoteRotate = now;
       for (int step = 0; step < quoteSlotN; step++) {
-        quoteShowIdx = (quoteShowIdx + 1) % quoteSlotN;
-        if (quoteValid[quoteShowIdx]) break;   // 跳到下一个有效项；全无效时停在原处
+        int nxt = (quoteShowIdx + 1) % quoteSlotN;
+        if (quoteValid[nxt]) { quoteShowIdx = nxt; themeQuoteAnimStart(); break; }
+        quoteShowIdx = nxt;   // 全无效时仍推进，停在原处的兜底逻辑交给下方判断
       }
     }
     UiData d;
@@ -304,7 +309,14 @@ void loop() {
     d.city    = cfg.city_name.c_str();
     d.weather = weatherValid ? &weather : nullptr;
     d.quote   = (quoteSlotN > 0 && quoteValid[quoteShowIdx]) ? &quotes[quoteShowIdx] : nullptr;
+    sUi = d;
     themeTick(d, blinkOn);
+  }
+
+  // 行情上滑动效：过渡期以 ~30ms 帧率重绘（平时不占用）
+  if (themeQuoteAnimActive() && now - lastAnim >= 30) {
+    lastAnim = now;
+    themeQuoteAnimTick(sUi);
   }
 
   // 2. 天气：定期拉取（主题在下一个 tick 依据 key 变化自动重绘）

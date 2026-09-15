@@ -81,6 +81,71 @@ static void dblRule(int y) {
   lcd.fillRect(14, y + 2, 212, 1, PH_FAINT);
 }
 
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
+static void retroQuoteRow(const QuoteData& q, int qy) {
+  char pbuf[24];
+  snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
+
+  bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
+  char cbuf[16];
+  int pctW = 0;
+  lcd.setFont(FONT_SMALL);
+  if (hasPct) {
+    snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
+    pctW = lcd.textWidth(cbuf);
+  }
+
+  lcd.setFont(FONT_CN);
+  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
+  lcd.setFont(FONT_PRICE);
+  int priceW = lcd.textWidth(pbuf);
+  int limit  = hasPct ? (CL_XR - pctW - 12) : CL_XR;
+  int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
+  int gap = 6;
+  if (gaps > 0) {
+    int avail = (limit - CL_X0) - (labelW + priceW + unitW + 10);
+    gap = constrain(avail / gaps, 3, 8);
+  }
+
+  int x = CL_X0 + 4;
+  lcd.setTextSize(1);
+  lcd.setTextDatum(middle_left);
+  if (labelW > 0) {
+    lcd.setFont(FONT_CN);
+    lcd.setTextColor(PH_DIM, BG);
+    drawTextClamped(q.label.c_str(), x, qy, 72);
+    x += labelW + gap;
+  }
+  // 电子管窗口：微光描边 + 高亮磷光数字（nixie 质感）
+  lcd.drawRect(x - 5, qy - 10, priceW + 10, 20, PH_FAINT);
+  lcd.setFont(FONT_PRICE);
+  lcd.setTextColor(PH_BRIGHT, BG);
+  lcd.drawString(pbuf, x, qy + 1);
+  x += priceW + 10 + (unitW > 0 ? gap : 0);
+  if (unitW > 0) {
+    lcd.setFont(FONT_CN);
+    lcd.setTextColor(PH_DIM, BG);
+    drawTextClamped(q.unit.c_str(), x, qy, limit - x);
+  }
+  if (hasPct) {
+    lcd.setFont(FONT_SMALL);
+    lcd.setTextDatum(middle_right);
+    lcd.setTextColor(q.changePct > 0 ? PH_BRIGHT : PH_DIM, BG);
+    lcd.drawString(cbuf, CL_XR, qy + 1);
+  }
+}
+
+// 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制
+void retroQuoteAnim(const UiData& d) {
+  if (!d.quote || !d.quote->ok) return;
+  float p = themeQuoteAnimProgress();
+  int rise = (int)(QANIM_K * p);
+  if (rise < 0) return;
+  lcd.fillRect(CL_X0, Q_Y - 12, 224, 25 + QANIM_K, BG);
+  retroQuoteRow(*d.quote, Q_Y + rise);
+}
+
 void retroTick(const UiData& d, bool blinkColon) {
   uint32_t ep = themeEpoch();
   if (ep != sEpoch) {
@@ -209,62 +274,9 @@ void retroTick(const UiData& d, bool blinkColon) {
          ((uint32_t)q.label.length() << 20) ^ ((uint32_t)q.unit.length() << 24) ^
          ((uint32_t)q.decimals << 28) ^ 1;
   }
-  if (qk != sQKey) {
+  if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管
     sQKey = qk;
     lcd.fillRect(CL_X0, Q_Y - 12, 224, 25, BG);   // 190..214，不触碰底部边框
-    if (qk) {
-      const QuoteData& q = *d.quote;
-      char pbuf[24];
-      snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
-
-      bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
-      char cbuf[16];
-      int pctW = 0;
-      lcd.setFont(FONT_SMALL);
-      if (hasPct) {
-        snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
-        pctW = lcd.textWidth(cbuf);
-      }
-
-      lcd.setFont(FONT_CN);
-      int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-      int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
-      lcd.setFont(FONT_PRICE);
-      int priceW = lcd.textWidth(pbuf);
-      int limit  = hasPct ? (CL_XR - pctW - 12) : CL_XR;
-      int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
-      int gap = 6;
-      if (gaps > 0) {
-        int avail = (limit - CL_X0) - (labelW + priceW + unitW + 10);
-        gap = constrain(avail / gaps, 3, 8);
-      }
-
-      int x = CL_X0 + 4;
-      lcd.setTextSize(1);
-      lcd.setTextDatum(middle_left);
-      if (labelW > 0) {
-        lcd.setFont(FONT_CN);
-        lcd.setTextColor(PH_DIM, BG);
-        drawTextClamped(q.label.c_str(), x, Q_Y, 72);
-        x += labelW + gap;
-      }
-      // 电子管窗口：微光描边 + 高亮磷光数字（nixie 质感）
-      lcd.drawRect(x - 5, Q_Y - 10, priceW + 10, 20, PH_FAINT);
-      lcd.setFont(FONT_PRICE);
-      lcd.setTextColor(PH_BRIGHT, BG);
-      lcd.drawString(pbuf, x, Q_Y + 1);
-      x += priceW + 10 + (unitW > 0 ? gap : 0);
-      if (unitW > 0) {
-        lcd.setFont(FONT_CN);
-        lcd.setTextColor(PH_DIM, BG);
-        drawTextClamped(q.unit.c_str(), x, Q_Y, limit - x);
-      }
-      if (hasPct) {
-        lcd.setFont(FONT_SMALL);
-        lcd.setTextDatum(middle_right);
-        lcd.setTextColor(q.changePct > 0 ? PH_BRIGHT : PH_DIM, BG);
-        lcd.drawString(cbuf, CL_XR, Q_Y + 1);
-      }
-    }
+    if (qk) retroQuoteRow(*d.quote, Q_Y);
   }
 }

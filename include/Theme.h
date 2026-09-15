@@ -56,3 +56,15 @@ void themeTick(const UiData& d, bool blinkColon);
 
 // 兼容旧调用点：主题系统激活前用（暂无用途时保留）
 void themeInvalidate();   // 递增 epoch，强制下一次 tick 全屏重绘
+
+// ---- 行情轮播"上滑进入"过渡 ----
+// 轮播切到新行情时由 main 调用 themeQuoteAnimStart()；过渡期以较高帧率
+// 反复调用 themeQuoteAnimTick(d)，各主题把底部行情行从下方滑升入位。
+// themeQuoteAnimProgress() 返回 0=已到位 … 1=刚开始(最靠下).
+void themeQuoteAnimStart();                 // 开始一次上滑（若已在过渡则不重置）
+bool themeQuoteAnimActive();                // 过渡进行中？
+float themeQuoteAnimProgress();             // 0..1 剩余上浮比例
+void themeQuoteAnimTick(const UiData& d);   // 动画帧：驱动当前主题上滑重绘
+
+// 行情上滑最大幅度（主题可自行缩放/截断）；扩展性/翻译用，改动动画节奏时调整
+const int QANIM_K = 10;
