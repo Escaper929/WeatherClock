@@ -139,11 +139,12 @@ static void retroQuoteRow(const QuoteData& q, int qy) {
 // 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制
 void retroQuoteAnim(const UiData& d) {
   if (!d.quote || !d.quote->ok) return;
+  const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
-  int rise = (int)(QANIM_K * p);
-  if (rise < 0) return;
-  lcd.fillRect(CL_X0, Q_Y - 12, 224, 25 + QANIM_K, BG);
-  retroQuoteRow(*d.quote, Q_Y + rise);
+  int off = (int)(QANIM_K * p);
+  lcd.fillRect(CL_X0, Q_Y - QANIM_K - 4, CL_XR - CL_X0, 2 * QANIM_K + 10, BG);
+  if (old && old->ok && off > 2) retroQuoteRow(*old, Q_Y + off - QANIM_K);
+  retroQuoteRow(*d.quote, Q_Y + off);
 }
 
 void retroTick(const UiData& d, bool blinkColon) {

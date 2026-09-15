@@ -300,7 +300,11 @@ void loop() {
       lastQuoteRotate = now;
       for (int step = 0; step < quoteSlotN; step++) {
         int nxt = (quoteShowIdx + 1) % quoteSlotN;
-        if (quoteValid[nxt]) { quoteShowIdx = nxt; themeQuoteAnimStart(); break; }
+        if (quoteValid[nxt]) {
+          themeQuoteAnimStart(quotes[quoteShowIdx]);   // 上一条行情作上滑滑出的起点
+          quoteShowIdx = nxt;
+          break;
+        }
         quoteShowIdx = nxt;   // 全无效时仍推进，停在原处的兜底逻辑交给下方判断
       }
     }

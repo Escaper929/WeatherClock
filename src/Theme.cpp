@@ -20,10 +20,12 @@ void pixelQuoteAnim (const UiData& d);
 void wastelandQuoteAnim(const UiData& d);
 void marioQuoteAnim (const UiData& d);
 
-// ---- 行情上滑过渡状态机 ----
-static bool        sQAnim   = false;     // 一次上滑进行中
-static uint32_t    sQAnimT0 = 0;
-static const uint32_t QANIM_MS = 320;    // 过渡时长
+// ---- 行情上滑过渡状态机（双向滚动：旧上滑滑出、新从下方滑入） ----
+static bool            sQAnim   = false;     // 一次上滑进行中
+static uint32_t        sQAnimT0 = 0;
+static QuoteData       sPrevQ;               // 上一条正在显示的行情（作上滑滑出的内容）
+static bool            sPrevValid = false;
+static const uint32_t QANIM_MS = 450;    // 过渡时长
 
 const char* themeName(DisplayTheme t) {
   switch (t) {
@@ -68,9 +70,15 @@ void themeTick(const UiData& d, bool blinkColon) {
   }
 }
 
-void themeQuoteAnimStart() {
-  sQAnim   = true;
-  sQAnimT0 = millis();
+void themeQuoteAnimStart(const QuoteData& prev) {
+  sQAnim     = true;
+  sQAnimT0   = millis();
+  sPrevQ     = prev;
+  sPrevValid = true;
+}
+
+const QuoteData* themeQuotePrev() {
+  return (sQAnim && sPrevValid) ? &sPrevQ : nullptr;
 }
 
 bool themeQuoteAnimActive() { return sQAnim; }
@@ -79,8 +87,10 @@ float themeQuoteAnimProgress() {
   if (!sQAnim) return 0.f;
   uint32_t e = millis() - sQAnimT0;
   if (e >= QANIM_MS) { sQAnim = false; return 0.f; }
-  float p = 1.f - (float)e / (float)QANIM_MS;   // 1 → 0（缓动：起步快、落点缓）
-  return p * p;                                  // ease-out
+  // 余弦 ease-in-out：1 → 0，两端速度为零、中段匀速，避免旧 ease-out 首帧即跳 85% 造成的"闪烁"感。
+  // 整体行程=QANIM_K*0.86（余弦最小到离 0 还有半像素），配合 ~450ms 周期，形成持续上移的滚动观感。
+  float t = (float)e / (float)QANIM_MS;
+  return 0.5f + 0.5f * cosf(t * M_PI);
 }
 
 void themeQuoteAnimTick(const UiData& d) {

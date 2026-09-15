@@ -319,15 +319,15 @@ static void pixelQuoteRow(const QuoteData& q, int qy) {
   }
 }
 
-// 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制（节奏条在底部，用小幅度）
+// 行情上滑动画帧：清除条带+上下过渡区，旧行上滑滑出、新行从下方滑升入位
 void pixelQuoteAnim(const UiData& d) {
   if (!d.quote || !d.quote->ok) return;
+  const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
-  const int K = 6;
-  int rise = (int)(K * p);
-  if (rise < 0) return;
-  lcd.fillRect(10, 206, 220, 24 + K, DEEP);
-  pixelQuoteRow(*d.quote, Q_Y + rise);
+  int off = (int)(QANIM_K * p);
+  lcd.fillRect(10, Q_Y - QANIM_K - 2, 220, 2 * QANIM_K + 4, DEEP);
+  if (old && old->ok && off > 2) pixelQuoteRow(*old, Q_Y + off - QANIM_K);
+  pixelQuoteRow(*d.quote, Q_Y + off);
 }
 
 void pixelTick(const UiData& d, bool blinkColon) {

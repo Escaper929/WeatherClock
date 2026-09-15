@@ -356,12 +356,12 @@ static void marioQuoteRow(const QuoteData& q, int qy) {
 // 行情上滑动画帧：重铺砖墙+清过渡区，再在抬高位置绘制
 void marioQuoteAnim(const UiData& d) {
   if (!d.quote || !d.quote->ok) return;
+  const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
-  const int K = 6;
-  int rise = (int)(K * p);
-  if (rise < 0) return;
-  drawBrickBar();
-  marioQuoteRow(*d.quote, Q_Y + rise);
+  int off = (int)(QANIM_K * p);
+  drawBrickBar();                                  // 重铺砖墙，充当过渡区清除
+  if (old && old->ok && off > 2) marioQuoteRow(*old, Q_Y + off - QANIM_K);
+  marioQuoteRow(*d.quote, Q_Y + off);
 }
 
 void marioTick(const UiData& d, bool blinkColon) {

@@ -121,15 +121,15 @@ static void modernQuoteRow(const QuoteData& q, int qy) {
   }
 }
 
-// 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制（行紧贴底边，用较小幅度）
+// 行情上滑动效（双向滚动）：清除条带+上下过渡区，旧行上滑滑出、新行从下方滑升入位
 void modernQuoteAnim(const UiData& d) {
   if (!d.quote || !d.quote->ok) return;
+  const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
-  const int K = 5;                              // 页脚空间小，幅度收一点
-  int rise = (int)(K * p);
-  if (rise < 0) return;
-  lcd.fillRect(ZONE_QUOTE.x, ZONE_QUOTE.y, ZONE_QUOTE.w, ZONE_QUOTE.h + K, BG);
-  modernQuoteRow(*d.quote, Q_Y + rise);
+  int off = (int)(QANIM_K * p);                    // 新行从下方进入的偏移 0..QANIM_K
+  lcd.fillRect(0, Q_Y - QANIM_K - 4, 240, 240 - (Q_Y - QANIM_K - 4), BG);
+  if (old && old->ok && off > 2) modernQuoteRow(*old, Q_Y + off - QANIM_K);   // 旧行上移滑出
+  modernQuoteRow(*d.quote, Q_Y + off);             // 新行滑入
 }
 
 void modernTick(const UiData& d, bool blinkColon) {

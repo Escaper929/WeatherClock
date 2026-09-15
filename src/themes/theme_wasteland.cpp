@@ -165,15 +165,16 @@ static void wastelandQuoteRow(const QuoteData& q, int qy) {
   }
 }
 
-// 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制
+// 行情上滑动画帧：清除行带+上下过渡区，旧行上滑滑出、新行从下方滑升入位
 void wastelandQuoteAnim(const UiData& d) {
   if (!d.quote || !d.quote->ok) return;
+  const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
-  int rise = (int)(QANIM_K * p);
-  if (rise < 0) return;
-  lcd.fillRect(CL_X0, Q_Y - 12, 216, 25 + QANIM_K, CNT);
-  wastelandQuoteRow(*d.quote, Q_Y + rise);
-  stampScan(CL_X0, Q_Y - 12, 216, 25 + QANIM_K);
+  int off = (int)(QANIM_K * p);
+  lcd.fillRect(CL_X0, Q_Y - QANIM_K - 4, 216, 2 * QANIM_K + 10, CNT);
+  if (old && old->ok && off > 2) wastelandQuoteRow(*old, Q_Y + off - QANIM_K);
+  wastelandQuoteRow(*d.quote, Q_Y + off);
+  stampScan(CL_X0, Q_Y - QANIM_K - 4, 216, 2 * QANIM_K + 10);
 }
 
 void wastelandTick(const UiData& d, bool blinkColon) {
