@@ -17,6 +17,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <time.h>
+#include "FwVersion.h"   // 由 build_genversion.py / CI 生成，提供 FW_VERSION 宏
 
 // 固件版本串：CI 构建时注入 src/FwVersion.h（短 SHA + UTC 日期，与 web/version.txt 同源），
 // 本地构建无该头文件时回退为编译时间戳。
