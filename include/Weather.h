@@ -21,6 +21,12 @@ struct WeatherData {
 // 成功返回 true 并回填 id；失败返回 false
 bool geoResolveCity(const String& apikey, const String& apiHost, const String& cityName, String& outId);
 
+// 自动定位：先取本机公网 IP，再用和风 GeoAPI 反查所在城市（用于配置页「自动定位」）
+// 成功返回 true 并回填 outId(城市 LocationID) / outName(城市名) / outLon,outLat(坐标，和风坐标，与高德一致)
+// 失败返回 false
+bool ipGeoLocate(const String& apikey, const String& apiHost, String& outId, String& outName,
+                 String& outLon, String& outLat);
+
 // 拉取当前天气。地理位置：优先拿 cfg.lat/lon 非 0 则用经纬度，否则用 location_id。
 bool fetchWeather(const AppConfig& cfg, WeatherData& out);
 

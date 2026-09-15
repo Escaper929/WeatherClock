@@ -200,6 +200,57 @@ bool geoResolveCity(const String& apikey, const String& apiHost, const String& c
   return true;
 }
 
+// 自动定位：公网 IP -> qweather GeoAPI 反查所在城市
+// 1) api.ipify.org 取公网 IP；2) qweather /v2/ip 解析出城市 id + 名
+bool ipGeoLocate(const String& apikey, const String& apiHost, String& outId, String& outName,
+                 String& outLon, String& outLat) {
+  if (apikey.length() == 0) return false;
+
+  // 1) 取公网 IP
+  String body;
+  if (!httpsGetRaw("api.ipify.org", "/?format=json", "", body)) {
+    Serial.println("[geo] ipify failed");
+    return false;
+  }
+  JsonDocument ipdoc;
+  if (deserializeJson(ipdoc, body)) {
+    Serial.println("[geo] ipify json parse failed");
+    return false;
+  }
+  String ip = ipdoc["ip"] | "";
+  if (ip.length() == 0) { Serial.println("[geo] ip empty"); return false; }
+  Serial.printf("[geo] public ip=%s\n", ip.c_str());
+
+  // 2) qweather GeoAPI 按 IP 解析城市（新账号 host 走 /geo/v2/ip）
+  String body2;
+  const char* host = apiHost.length() > 0 ? apiHost.c_str() : GEO_HOST;
+  String path = apiHost.length() > 0 ? "/geo/v2/ip" : "/v2/ip";
+  path += "?location=" + ip + "&key=" + apikey;
+  if (!httpsGetRaw(host, path, "X-QW-Api-Key: " + apikey, body2)) {
+    Serial.println("[geo] locate http failed");
+    return false;
+  }
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, body2);
+  if (err) {
+    Serial.printf("[geo] locate json parse failed: %s\n", err.c_str());
+    return false;
+  }
+  if (String(doc["code"] | "") != "200") {
+    Serial.printf("[geo] locate code=%s\n", doc["code"] | "");
+    return false;
+  }
+  JsonObject loc = doc["location"].as<JsonObject>();
+  outId   = loc["id"]   | "";
+  outName = loc["name"] | "";
+  outLon  = loc["lon"]  | "";
+  outLat  = loc["lat"]  | "";
+  if (outId.length() == 0) { Serial.println("[geo] locate id empty"); return false; }
+  Serial.printf("[geo] locate -> %s (%s) lon=%s lat=%s\n",
+                outName.c_str(), outId.c_str(), outLon.c_str(), outLat.c_str());
+  return true;
+}
+
 bool fetchWeather(const AppConfig& cfg, WeatherData& out) {
   out = WeatherData();
   if (cfg.qweather_key.length() == 0) return false;

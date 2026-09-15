@@ -312,8 +312,14 @@ details.hint .hintb b{color:var(--txt)}
 <label>和风 API Host（控制台-开发者信息，如 abc123.re.qweatherapi.com）</label>
 <input name='h' value='$H$' placeholder='例如 abc123.re.qweatherapi.com'>
 <div class='row'>
-<div><label>城市</label><input name='c' value='$C$' placeholder='如 北京'></div>
-<div><label>经纬度(经,纬)</label><input name='g' value='$G$' placeholder='可选'></div>
+<div>
+<label>城市 · 可点击「定位」自动获取当前位置</label>
+<div style='display:flex;gap:6px;align-items:center'>
+<input name='c' value='$C$' placeholder='如 北京' style='flex:1'>
+<button type='button' class='btn2' onclick='autoLocate()' style='flex:0 0 auto;padding:9px 12px;margin-top:0'>定位</button>
+</div>
+</div>
+<div><label>经纬度(经,纬)</label><input name='g' value='$G$' placeholder='可选'><div style='font-size:12px;color:var(--link);margin-top:4px'><a href='https://lbs.amap.com/tools/picker' target='_blank' rel='noopener' style='color:var(--link);text-decoration:none'>用高德坐标拾取器获取精确坐标</a>（复制「经度,纬度」填入）</div></div>
 </div>
 <label>时区</label>
 <select name='z'>$TZOPT$</select>
@@ -439,6 +445,27 @@ function testApi(){
     }
   })
   .catch(function(e){res.textContent='✗ 请求设备失败：'+e;});
+}
+function autoLocate(){
+  var res=document.getElementById('res');
+  res.style.display='block';res.className='';
+  var k=q('k');var h=q('h');
+  if(!k){res.textContent='✗ 请先填写和风 API Key';return;}
+  res.textContent='正在通过网络自动定位当前位置…';
+  var body=new URLSearchParams();
+  body.append('k',k);body.append('h',h);
+  fetch('/api/locate',{method:'POST',body:body,headers:{'Content-Type':'application/x-www-form-urlencoded'}})
+  .then(function(r){return r.json();})
+  .then(function(j){
+    if(j.ok===1){
+      document.getElementById('cf').elements['c'].value=j.name;
+      if(j.lon&&j.lat){document.getElementById('cf').elements['g'].value=j.lon+','+j.lat;}
+      syncCity();
+      res.className='ok';
+      res.textContent='✓ 已定位到：'+j.name+'（'+j.id+'）自动填入经纬度 '+j.lon+','+j.lat+'，可点「测试 API」验证';
+    }else{res.textContent='✗ 定位失败：'+(j.err||'请核对 API Key / Host / 联网');}
+  })
+  .catch(function(e){res.textContent='✗ 定位请求失败：'+e;});
 }
 function otaStart(){
   var f=document.getElementById('otafile').files[0];
@@ -569,6 +596,25 @@ static void handleApiPreview(WebServer& server) {
   if (okBody.length() == 0) okBody = "{\"ok\":0,\"err\":\"" + jsonEsc(err) + "\"}";
   okBody = okBody.substring(0, okBody.length() - 1) + quoteSeg + "}";
   server.send(200, "application/json; charset=utf-8", okBody);
+}
+
+// ---- /api/locate：自动定位（公网 IP -> 和风 GeoAPI 反查城市），返回城市 id/名/坐标 ----
+static void handleApiLocate(WebServer& server) {
+  String k = server.arg("k"); k.trim();
+  String h = server.arg("h"); h.trim();
+  h.replace("https://", ""); h.replace("http://", "");
+  while (h.endsWith("/")) h.remove(h.length() - 1);
+  String id, name, lon, lat;
+  String ok;
+  if (k.length() == 0) {
+    ok = "{\"ok\":0,\"err\":\"缺少 API Key\"}";
+  } else if (ipGeoLocate(k, h, id, name, lon, lat)) {
+    ok = "{\"ok\":1,\"id\":\"" + jsonEsc(id) + "\",\"name\":\"" + jsonEsc(name) +
+         "\",\"lon\":\"" + jsonEsc(lon) + "\",\"lat\":\"" + jsonEsc(lat) + "\"}";
+  } else {
+    ok = "{\"ok\":0,\"err\":\"定位失败（检查 API Key / Host / 联网）\"}";
+  }
+  server.send(200, "application/json; charset=utf-8", ok);
 }
 
 // ---- /api/theme：主题即时切换（保存 NVS + 立即应用，不重启） ----
@@ -873,6 +919,9 @@ static void registerRoutes(WebServer& server, AppConfig& cfg, String ipText) {
   });
   server.on("/api/preview", HTTP_POST, [&]() {
     handleApiPreview(server);
+  });
+  server.on("/api/locate", HTTP_POST, [&]() {
+    handleApiLocate(server);
   });
   server.on("/api/theme", HTTP_POST, [&]() {
     handleApiTheme(server, cfg);
