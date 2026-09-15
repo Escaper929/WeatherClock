@@ -674,9 +674,16 @@ static bool fwHttpBegin(WiFiClientSecure& cl, HTTPClient& http, const String& ur
   return http.begin(cl, url);
 }
 
-// 拉取 web/version.txt（短SHA 日期），依次尝试各镜像，失败返回空串
+// 拉取 web/version.txt（短SHA 日期），依次尝试各镜像，失败返回空串。
+// 关键：版本比对必须拿到「最新值」。jsDelivr @main 是可变引用，CDN 可能返回旧缓存，
+// 一旦命中也无法判断新旧，会误报已是最新；故优先用 GitHub Raw（直连 git、无 CDN 缓存），
+// 只有它连不通时才回退到 4 个 jsDelivr 节点作国内兜底。（固件下载不受此影响：那是 SHA
+// pin 的不可变 URL，即便有 CDN 缓存也是同一份文件。）
 static String fwFetchLatest() {
-  for (int i = 0; i < FW_BASES_N; i++) {
+  // 尝试顺序：先 GitHub Raw，再 jsDelivr 4 节点（镜像 base 索引 4 = raw）
+  static const int ORDER[FW_BASES_N] = {4, 0, 1, 2, 3};
+  for (int k = 0; k < FW_BASES_N; k++) {
+    int i = ORDER[k];
     WiFiClientSecure cl;
     HTTPClient http;
     String url = fwBaseUrl(i, "main") + "/web/version.txt?t=" + millis();
