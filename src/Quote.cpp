@@ -7,6 +7,7 @@
 #include <math.h>
 
 static const char* EM_HOST = "push2.eastmoney.com";
+static const char* EMHIS_HOST = "push2his.eastmoney.com";  // K线端点（沪铜现价经此获取）
 static const char* JD_HOST = "api.jdjygold.com";   // 京东金融：浙商积存金
 static const char* JD_PATH = "/gw2/generic/jrm/h5/m/stdLatestPrice?productSku=1961543816";
 
@@ -48,6 +49,16 @@ static bool splitUrl(const String& url, String& host, String& path) {
   return host.length() > 0;
 }
 
+// 取 CSV 指定段(0起)的数值，成功返回 true
+static bool csvSegAt(const char* s, int idx, float& out) {
+  if (!s) return false;
+  int seg = 0; const char* p = s;
+  while (*p && seg < idx) { if (*p == ',') seg++; p++; }
+  if (*p == 0 || seg != idx) return false;
+  out = (float)atof(p);
+  return true;
+}
+
 // 按点分路径从 JSON 取数字，如 "data.f43" / "price" / "result.list.0.last"
 static bool jsonPathFloat(JsonDocument& doc, const String& path, float& out) {
   JsonVariant cur = doc.template as<JsonVariant>();
@@ -83,6 +94,7 @@ bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out) {
   String host, path, label, unit;
   bool jdGold   = (slot.type == 1);                          // 金价走京东金融·浙商积存金
   bool emPreset = (slot.type == 2 || slot.type == 4);        // 布油/沪铜仍走东财
+  bool emCopper = (slot.type == 4);                          // 沪铜最新价走东财K线端点
 
   if (jdGold) {
     host  = JD_HOST;
@@ -91,8 +103,17 @@ bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out) {
     unit  = PRESETS[1].unit;
   } else if (emPreset) {
     const Preset& p = PRESETS[slot.type];  // 数组边界：有效预设仅 1/2/4
-    host = EM_HOST;
-    path = String("/api/qt/stock/get?secid=") + p.secid + "&fields=f43,f59,f170";
+    if (emCopper) {
+      // 沪铜：东财实时 stock/get 接口会清空 f43，改用 K 线端点取当日收盘
+      host = EMHIS_HOST;
+      // klt=101 日K，lmt=2 取今昨两根：fields2 f51日期 f52开 f53收 f54高 f55低
+      path = String("/api/qt/stock/kline/get?secid=") + p.secid +
+             "&klt=101&fqt=0&end=20500101&lmt=2&fields1=f1,f3" +
+             "&fields2=f51,f52,f53,f54,f55";
+    } else {
+      host = EM_HOST;
+      path = String("/api/qt/stock/get?secid=") + p.secid + "&fields=f43,f59,f170";
+    }
     label = p.label;
     unit  = p.unit;
   } else {
@@ -129,6 +150,26 @@ bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out) {
     }
     out.price     = atof(datas["price"]          | "0");
     out.changePct = pctStrToFloat(datas["upAndDownRate"] | "");
+    out.decimals  = 2;
+  } else if (emCopper) {
+    // 东财K线：data.klines 各元素 "日期,开,收,高,低"；取末根=今收、前根=昨收
+    JsonArray kl = doc["data"]["klines"].as<JsonArray>();
+    if (kl.size() < 2) {
+      Serial.println("[quote] em kline empty");
+      return false;
+    }
+    const char* near = kl[kl.size() - 1].as<const char*>();
+    const char* prev = kl[kl.size() - 2].as<const char*>();
+    if (!near || !prev) { Serial.println("[quote] em kline bad"); return false; }
+    // CSV："日期,开盘(1),收盘(2),最高(3),最低(4)..."，收在段2
+    float cnow = 0, preClose = 0;
+    if (!csvSegAt(near, 2, cnow) || !csvSegAt(prev, 2, preClose)) {
+      Serial.println("[quote] em kline csv fail");
+      return false;
+    }
+    if (cnow <= 0) { Serial.println("[quote] em kline price 0"); return false; }
+    out.price     = cnow;
+    out.changePct = preClose > 0 ? (cnow - preClose) / preClose * 100.0f : 0.0f;
     out.decimals  = 2;
   } else if (emPreset) {
     // 东财：f43=最新价(定点数) f59=小数位 f170=涨跌幅%(×100)
