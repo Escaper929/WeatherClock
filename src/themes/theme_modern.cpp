@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  theme_modern.cpp - Modern 主题（原精修 UI 迁移）
 //
 //  定位：现代极简 + 轻微复古电子钟。黑底暖白，时间绝对主角，
@@ -61,27 +61,27 @@ static void drawTempSegments(int val, int xRight, int yTop) {
   lcd.drawString("\xC2\xB0""C", xRight + DEG_DX, yTop + DEG_DY);
 }
 
-// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
-static void modernQuoteRow(const QuoteData& q, int qy) {
-  lcd.fillRect(FOOT_RULE_X, FOOT_RULE_Y, FOOT_RULE_W, 1, HAIRLINE);
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用；g 为可注入目标）
+static void modernQuoteRow(lgfx::LGFXBase& g, const QuoteData& q, int qy) {
+  g.fillRect(FOOT_RULE_X, FOOT_RULE_Y, FOOT_RULE_W, 1, HAIRLINE);
 
   bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
   char cbuf[16];
   int pctW = 0;
   if (hasPct) {
     snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
-    lcd.setFont(FONT_SMALL);
-    pctW = lcd.textWidth(cbuf);
+    g.setFont(FONT_SMALL);
+    pctW = g.textWidth(cbuf);
   }
 
   char pbuf[24];
   snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
 
-  lcd.setFont(FONT_CN);
-  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
-  lcd.setFont(FONT_SMALL);
-  int priceW = lcd.textWidth(pbuf);
+  g.setFont(FONT_CN);
+  int labelW = q.label.length() ? g.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? g.textWidth(q.unit)  : 0;
+  g.setFont(FONT_SMALL);
+  int priceW = g.textWidth(pbuf);
 
   int limit = hasPct ? (Q_X_R - pctW - 10) : Q_X_R;
   int gaps  = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
@@ -92,44 +92,69 @@ static void modernQuoteRow(const QuoteData& q, int qy) {
   }
 
   int x = Q_X_L;
-  lcd.setTextSize(1);
-  lcd.setTextDatum(middle_left);
+  g.setTextSize(1);
+  g.setTextDatum(middle_left);
 
   if (labelW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(INK3, BG);
-    lcd.drawString(q.label, x, qy);
+    g.setFont(FONT_CN);
+    g.setTextColor(INK3, BG);
+    g.drawString(q.label, x, qy);
     x += labelW + gap;
   }
 
-  lcd.setFont(FONT_SMALL);
-  lcd.setTextColor(INK2, BG);
-  lcd.drawString(pbuf, x, qy + 1);
+  g.setFont(FONT_SMALL);
+  g.setTextColor(INK2, BG);
+  g.drawString(pbuf, x, qy + 1);
   x += priceW + (unitW > 0 ? gap : 0);
 
   if (unitW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(INK3, BG);
-    lcd.drawString(q.unit, x, qy);
+    g.setFont(FONT_CN);
+    g.setTextColor(INK3, BG);
+    g.drawString(q.unit, x, qy);
   }
 
   if (hasPct) {
-    lcd.setFont(FONT_SMALL);
-    lcd.setTextColor(q.changePct > 0 ? UP : DOWN, BG);
-    lcd.setTextDatum(middle_right);
-    lcd.drawString(cbuf, Q_X_R, qy + 1);
+    g.setFont(FONT_SMALL);
+    g.setTextColor(q.changePct > 0 ? UP : DOWN, BG);
+    g.setTextDatum(middle_right);
+    g.drawString(cbuf, Q_X_R, qy + 1);
   }
 }
 
-// 行情上滑动效（双向滚动）：清除条带+上下过渡区，旧行上滑滑出、新行从下方滑升入位
+// 行情上滑动效（双向滚动）：在离屏 Sprite 双缓冲里整帧画好再一次性 push，
+// 避免原先"先清带再写文字"导致的逐帧闪烁。结束后立即 deleteSprite 释放 RAM。
+static lgfx::LGFX_Sprite sQAnimSpr(&lcd);
+static const int QANIM_Y0 = Q_Y - QANIM_K - 8;      // 条带顶（屏幕坐标）
+static const int QANIM_H  = 2 * QANIM_K + 22;       // 条带高（58）
+
 void modernQuoteAnim(const UiData& d) {
-  if (!d.quote || !d.quote->ok) return;
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+  if (!d.quote || !d.quote->ok) {
+    if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+    return;
+  }
   const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
   int off = (int)(QANIM_K * p);                    // 新行从下方进入的偏移 0..QANIM_K
-  lcd.fillRect(0, Q_Y - QANIM_K - 4, 240, 240 - (Q_Y - QANIM_K - 4), BG);
-  if (old && old->ok && off > 2) modernQuoteRow(*old, Q_Y + off - QANIM_K);   // 旧行上移滑出
-  modernQuoteRow(*d.quote, Q_Y + off);             // 新行滑入
+
+  if (!(sQAnimSpr.getBuffer() != nullptr)) {
+    sQAnimSpr.setColorDepth(lgfx::color_depth_t::rgb565_2Byte);
+    if (!sQAnimSpr.createSprite(240, QANIM_H)) return;
+  }
+  lgfx::LGFXBase& g = sQAnimSpr;
+
+  sQAnimSpr.fillSprite(BG);
+  // 重铺页脚发丝线（相对 Sprite 顶的局部坐标；实现体内部绝对坐标在 Sprite 内被裁剪）
+  g.fillRect(FOOT_RULE_X, FOOT_RULE_Y - QANIM_Y0, FOOT_RULE_W, 1, HAIRLINE);
+  if (old && old->ok && off > 2) modernQuoteRow(g, *old, Q_Y + off - QANIM_K - QANIM_Y0);
+  modernQuoteRow(g, *d.quote, Q_Y + off - QANIM_Y0);
+
+  sQAnimSpr.pushSprite(0, QANIM_Y0);
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+}
+
+void modernQuoteRelease(void) {
+  if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
 }
 
 void modernTick(const UiData& d, bool blinkColon) {
@@ -238,6 +263,6 @@ void modernTick(const UiData& d, bool blinkColon) {
   if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管
     sQKey = qk;
     lcd.fillRect(ZONE_QUOTE.x, ZONE_QUOTE.y, ZONE_QUOTE.w, ZONE_QUOTE.h, BG);
-    if (qk) modernQuoteRow(*d.quote, Q_Y);
+    if (qk) modernQuoteRow(lcd, *d.quote, Q_Y);
   }
 }

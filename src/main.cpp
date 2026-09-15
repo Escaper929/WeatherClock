@@ -323,6 +323,15 @@ void loop() {
     themeQuoteAnimTick(sUi);
   }
 
+  // 动画刚结束时释放离屏 Sprite，尽早归还 RAM（动画只在 30ms 轮询里推进，
+  // 结束后不再有 tick 调用，须由这里主动触发释放）
+  {
+    static bool qAnimWasActive = false;
+    bool qActive = themeQuoteAnimActive();
+    if (qAnimWasActive && !qActive) themeQuoteAnimRelease();
+    qAnimWasActive = qActive;
+  }
+
   // 2. 天气：定期拉取（主题在下一个 tick 依据 key 变化自动重绘）
   if (now - lastFetch >= WEATHER_FETCH_INTERVAL_SEC * 1000UL) {
     if (wifiIsConnected()) fetchWeatherSafe();

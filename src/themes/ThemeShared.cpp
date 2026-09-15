@@ -530,15 +530,15 @@ static const char* const PX_D5[16][7] = {
   {"##..#","##..#","...#.","..#..",".#...","#..##","#..##"},  // 13 '%'
 };
 
-static int pixChar5(int ox, int oy, int idx, int cell, uint16_t col) {
+static int pixChar5G(lgfx::LGFXBase& g, int ox, int oy, int idx, int cell, uint16_t col) {
   if (idx == 12) {  // '.'：2 列实点，占位 3 列
-    lcd.fillRect(ox, oy + 5 * cell, 2 * cell, 2 * cell, col);
+    g.fillRect(ox, oy + 5 * cell, 2 * cell, 2 * cell, col);
     return 3 * cell;
   }
   for (int r = 0; r < 7; r++) {
     const char* row = PX_D5[idx][r];
     for (int c = 0; c < 5; c++)
-      if (row[c] == '#') lcd.fillRect(ox + c * cell, oy + r * cell, cell, cell, col);
+      if (row[c] == '#') g.fillRect(ox + c * cell, oy + r * cell, cell, cell, col);
   }
   return 6 * cell;  // 5 列 + 1 列间隙
 }
@@ -562,23 +562,27 @@ int pixNum5x7Width(const char* s, int cell) {
   return w;
 }
 
-int pixNum5x7(int ox, int oy, const char* s, int cell, uint16_t col) {
+int pixNum5x7G(lgfx::LGFXBase& g, int ox, int oy, const char* s, int cell, uint16_t col) {
   for (; *s; s++) {
     int i = pixCharIdx(*s);
     if (i < 0) continue;
-    ox += pixChar5(ox, oy, i, cell, col);
+    ox += pixChar5G(g, ox, oy, i, cell, col);
   }
   return ox;
+}
+
+int pixNum5x7(int ox, int oy, const char* s, int cell, uint16_t col) {
+  return pixNum5x7G(lcd, ox, oy, s, cell, col);
 }
 
 // ---------------------------------------------------------------------------
 // 超长文字防御性截断（中文按字符截断，尾部补省略号）
 // ---------------------------------------------------------------------------
-int drawTextClamped(const char* s, int x, int y, int maxW) {
+int drawTextClampedG(lgfx::LGFXBase& g, const char* s, int x, int y, int maxW) {
   String t(s);
-  int fullW = lcd.textWidth(t);
+  int fullW = g.textWidth(t);
   if (fullW <= maxW) {                 // 完整放得下：整串绘制，绝不截断
-    lcd.drawString(t, x, y);
+    g.drawString(t, x, y);
     return fullW;
   }
   // 超宽：从头找"最长字符前缀 + …"能放进 maxW 的位置
@@ -588,11 +592,15 @@ int drawTextClamped(const char* s, int x, int y, int maxW) {
     int step = 1;
     while (end - step > 0 && (s[end - step] & 0xC0) == 0x80) step++;  // UTF-8 按字符回退
     end -= step;
-    if (lcd.textWidth(t.substring(0, end)) + lcd.textWidth("…") <= maxW) break;
+    if (g.textWidth(t.substring(0, end)) + g.textWidth("…") <= maxW) break;
   }
   String out = t.substring(0, end) + "…";
-  lcd.drawString(out, x, y);
-  return lcd.textWidth(out);
+  g.drawString(out, x, y);
+  return g.textWidth(out);
+}
+
+int drawTextClamped(const char* s, int x, int y, int maxW) {
+  return drawTextClampedG(lcd, s, x, y, maxW);
 }
 
 }  // namespace thm

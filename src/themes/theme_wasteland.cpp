@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  theme_wasteland.cpp - Wasteland 主题：废土蒸汽朋克终端 / 琥珀 CRT
 //
 //  定位：核战后地下避难所里仍在工作的老式气象终端。琥珀色磷光 CRT +
@@ -80,9 +80,9 @@ static void resetDirty() {
 // ---------------------------------------------------------------------------
 // CRT 扫描线：内容区内每 3 行 1 条极淡暗线（脏区重绘后补盖，保持覆盖连续）
 // ---------------------------------------------------------------------------
-static void stampScan(int x, int y, int w, int h) {
+static void stampScan(lgfx::LGFXBase& g, int x, int y, int w, int h) {
   for (int yy = y; yy < y + h; ++yy)
-    if (yy % 3 == 0) lcd.drawFastHLine(x, yy, w, SCAN);
+    if (yy % 3 == 0) g.drawFastHLine(x, yy, w, SCAN);
 }
 
 // ---------------------------------------------------------------------------
@@ -110,25 +110,25 @@ static void rule(int y) {
   lcd.fillRect(14, y, 212, 1, BRASS_D);
 }
 
-// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
-static void wastelandQuoteRow(const QuoteData& q, int qy) {
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用；g 为可注入目标）
+static void wastelandQuoteRow(lgfx::LGFXBase& g, const QuoteData& q, int qy) {
   char pbuf[24];
   snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
 
   bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
   char cbuf[16];
   int pctW = 0;
-  lcd.setFont(FONT_SMALL);
+  g.setFont(FONT_SMALL);
   if (hasPct) {
     snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
-    pctW = lcd.textWidth(cbuf);
+    pctW = g.textWidth(cbuf);
   }
 
-  lcd.setFont(FONT_CN);
-  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
-  lcd.setFont(FONT_PRICE);
-  int priceW = lcd.textWidth(pbuf);
+  g.setFont(FONT_CN);
+  int labelW = q.label.length() ? g.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? g.textWidth(q.unit)  : 0;
+  g.setFont(FONT_PRICE);
+  int priceW = g.textWidth(pbuf);
   int limit  = hasPct ? (CL_XR - pctW - 12) : CL_XR;
   int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
   int gap = 6;
@@ -138,43 +138,69 @@ static void wastelandQuoteRow(const QuoteData& q, int qy) {
   }
 
   int x = CL_X0 + 2;
-  lcd.setTextSize(1);
-  lcd.setTextDatum(middle_left);
+  g.setTextSize(1);
+  g.setTextDatum(middle_left);
   if (labelW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(AM_DIM, CNT);
-    drawTextClamped(q.label.c_str(), x, qy, 72);
+    g.setFont(FONT_CN);
+    g.setTextColor(AM_DIM, CNT);
+    drawTextClampedG(g, q.label.c_str(), x, qy, 72);
     x += labelW + gap;
   }
   // 仪表读数窗：暗黄铜描边 + 亮琥珀数字
-  lcd.drawRect(x - 5, qy - 10, priceW + 10, 20, BRASS_D);
-  lcd.setFont(FONT_PRICE);
-  lcd.setTextColor(AM_HI, CNT);
-  lcd.drawString(pbuf, x, qy + 1);
+  g.drawRect(x - 5, qy - 10, priceW + 10, 20, BRASS_D);
+  g.setFont(FONT_PRICE);
+  g.setTextColor(AM_HI, CNT);
+  g.drawString(pbuf, x, qy + 1);
   x += priceW + 10 + (unitW > 0 ? gap : 0);
   if (unitW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(AM_DIM, CNT);
-    drawTextClamped(q.unit.c_str(), x, qy, limit - x);
+    g.setFont(FONT_CN);
+    g.setTextColor(AM_DIM, CNT);
+    drawTextClampedG(g, q.unit.c_str(), x, qy, limit - x);
   }
   if (hasPct) {
-    lcd.setFont(FONT_SMALL);
-    lcd.setTextDatum(middle_right);
-    lcd.setTextColor(q.changePct > 0 ? AM_HI : AM_DIM, CNT);
-    lcd.drawString(cbuf, CL_XR, qy + 1);
+    g.setFont(FONT_SMALL);
+    g.setTextDatum(middle_right);
+    g.setTextColor(q.changePct > 0 ? AM_HI : AM_DIM, CNT);
+    g.drawString(cbuf, CL_XR, qy + 1);
   }
 }
 
-// 行情上滑动画帧：清除行带+上下过渡区，旧行上滑滑出、新行从下方滑升入位
+// 行情上滑动画帧：在离屏 Sprite 双缓冲里整帧画好（CNT 底 + 扫描线）再一次性 push，
+// 避免"先清带再写文字"造成的逐帧闪烁；结束后立即 deleteSprite 释放 RAM。
+static lgfx::LGFX_Sprite sQAnimSpr(&lcd);
+static const int QANIM_Y0 = Q_Y - QANIM_K - 8;
+static const int QANIM_H  = 2 * QANIM_K + 22;
+
 void wastelandQuoteAnim(const UiData& d) {
-  if (!d.quote || !d.quote->ok) return;
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+  if (!d.quote || !d.quote->ok) {
+    if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+    return;
+  }
   const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
   int off = (int)(QANIM_K * p);
-  lcd.fillRect(CL_X0, Q_Y - QANIM_K - 4, 216, 2 * QANIM_K + 10, CNT);
-  if (old && old->ok && off > 2) wastelandQuoteRow(*old, Q_Y + off - QANIM_K);
-  wastelandQuoteRow(*d.quote, Q_Y + off);
-  stampScan(CL_X0, Q_Y - QANIM_K - 4, 216, 2 * QANIM_K + 10);
+
+  if (!(sQAnimSpr.getBuffer() != nullptr)) {
+    sQAnimSpr.setColorDepth(lgfx::color_depth_t::rgb565_2Byte);
+    if (!sQAnimSpr.createSprite(240, QANIM_H)) return;
+  }
+  lgfx::LGFXBase& g = sQAnimSpr;
+
+  sQAnimSpr.fillSprite(CNT);                              // CRT 暖黑底
+  // 扫描线：按"绝对行号 %3==0"对齐全屏纹理，避免 push 边界断层
+  for (int yy = 0; yy < QANIM_H; ++yy)
+    if ((yy + QANIM_Y0) % 3 == 0) g.drawFastHLine(CL_X0, yy, CL_XR - CL_X0, SCAN);
+
+  if (old && old->ok && off > 2) wastelandQuoteRow(g, *old, Q_Y + off - QANIM_K - QANIM_Y0);
+  wastelandQuoteRow(g, *d.quote, Q_Y + off - QANIM_Y0);
+
+  sQAnimSpr.pushSprite(0, QANIM_Y0);
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+}
+
+void wastelandQuoteRelease(void) {
+  if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
 }
 
 void wastelandTick(const UiData& d, bool blinkColon) {
@@ -201,7 +227,7 @@ void wastelandTick(const UiData& d, bool blinkColon) {
     lcd.setTextDatum(middle_center);
     lcd.setTextColor(AM_DIM, CNT);
     lcd.drawString(db, 120, HDR_Y);
-    stampScan(CL_X0, 13, 216, 14);
+    stampScan(lcd, CL_X0, 13, 216, 14);
   }
 
   // ---- 大七段时间（琥珀高亮，仪表窗框，逐位脏检测） ----
@@ -211,7 +237,7 @@ void wastelandTick(const UiData& d, bool blinkColon) {
       if (digits[i] != sDigit[i]) {
         lcd.fillRect(CLK_XS[i], CLK_Y, 28, 52, CNT);
         segDigit(CLK_XS[i], CLK_Y, digits[i], SEGR, AM_HI);
-        stampScan(CLK_XS[i], CLK_Y, 28, 52);
+        stampScan(lcd, CLK_XS[i], CLK_Y, 28, 52);
         sDigit[i] = digits[i];
       }
     }
@@ -219,7 +245,7 @@ void wastelandTick(const UiData& d, bool blinkColon) {
   if (blinkColon != sBlink) {
     lcd.fillRect(COLON_CX - 4, CLK_Y + 6, 8, 40, CNT);
     segColonSquare(COLON_CX, CLK_Y, 52, blinkColon, AM);
-    stampScan(COLON_CX - 4, CLK_Y + 6, 8, 40);
+    stampScan(lcd, COLON_CX - 4, CLK_Y + 6, 8, 40);
   }
   if (sFull) {
     for (int i = 0; i < 4; i++) lcd.drawRect(CLK_XS[i] - 3, CLK_Y - 3, 34, 58, CELL);
@@ -271,7 +297,7 @@ void wastelandTick(const UiData& d, bool blinkColon) {
       lcd.setTextColor(AM_DIM, CNT);
       lcd.drawString(rb, CL_XR, RH_Y);
     }
-    stampScan(14, 110, 216, 50);
+    stampScan(lcd, 14, 110, 216, 50);
   }
 
   // ---- 城市 / 天气 / 体感行 ----
@@ -301,7 +327,7 @@ void wastelandTick(const UiData& d, bool blinkColon) {
         lcd.setTextColor(AM_DIM, CNT);
         drawTextClamped(fb, x, TXT_Y, CL_XR - 2 - x);
       }
-      stampScan(CL_X0, TXT_Y - 6, 216, 13);
+      stampScan(lcd, CL_X0, TXT_Y - 6, 216, 13);
     }
   }
 
@@ -316,14 +342,14 @@ void wastelandTick(const UiData& d, bool blinkColon) {
   if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管，避免先落位再上跳
     sQKey = qk;
     lcd.fillRect(CL_X0, Q_Y - 12, 216, 25, CNT);  // 184..208，不触碰状态栏
-    if (qk) wastelandQuoteRow(*d.quote, Q_Y);
-    stampScan(CL_X0, Q_Y - 12, 216, 25);
+    if (qk) wastelandQuoteRow(lcd, *d.quote, Q_Y);
+    stampScan(lcd, CL_X0, Q_Y - 12, 216, 25);
   }
 
   // ---- 整体重绘收尾：全内容区扫描线 ----
   if (sFull) {
     sFull = false;
-    stampScan(CL_X0, 12, 216, 216);
+    stampScan(lcd, CL_X0, 12, 216, 216);
   }
 
   // ---- 极轻微 CRT 闪烁：数秒一次、一拍即回的背光微降 ----

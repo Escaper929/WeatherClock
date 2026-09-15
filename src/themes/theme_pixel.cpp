@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  theme_pixel.cpp - Classic Platformer 主题：经典横版平台游戏 HUD
 //
 //  （由原 Pixel 深蓝夜幕主题整体重做；主题 ID 不变，NVS 兼容）
@@ -134,13 +134,13 @@ static void drawSunAt(int cx, int cy) {
 }
 
 // 像素金币 10x10，x,y 左上
-static void drawCoin(int x, int y) {
-  lcd.fillRect(x + 2, y, 6, 10, COIN);
-  lcd.fillRect(x, y + 2, 10, 6, COIN);
-  lcd.fillRect(x + 1, y + 1, 8, 8, COIN);
-  lcd.fillRect(x + 3, y + 2, 2, 6, COIN_H);    // 高光竖条
-  lcd.fillRect(x + 7, y + 3, 1, 4, COIN_D);    // 右缘暗
-  lcd.fillRect(x + 2, y + 7, 6, 1, COIN_D);    // 底缘暗
+static void drawCoin(lgfx::LGFXBase& g, int x, int y) {
+  g.fillRect(x + 2, y, 6, 10, COIN);
+  g.fillRect(x, y + 2, 10, 6, COIN);
+  g.fillRect(x + 1, y + 1, 8, 8, COIN);
+  g.fillRect(x + 3, y + 2, 2, 6, COIN_H);    // 高光竖条
+  g.fillRect(x + 7, y + 3, 1, 4, COIN_D);    // 右缘暗
+  g.fillRect(x + 2, y + 7, 6, 1, COIN_D);    // 底缘暗
 }
 
 // 经典砖块 16x10，x,y 左上
@@ -270,23 +270,23 @@ static void drawClockDigits(int h, int m) {
   }
 }
 
-// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
-static void pixelQuoteRow(const QuoteData& q, int qy) {
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用；g 为可注入目标）
+static void pixelQuoteRow(lgfx::LGFXBase& g, const QuoteData& q, int qy) {
   char pbuf[24];
   snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
 
   bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
   char cbuf[16];
   int pctW = 0;
-  lcd.setFont(FONT_SM);
+  g.setFont(FONT_SM);
   if (hasPct) {
     snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
     pctW = pixNum5x7Width(cbuf, 2);
   }
 
-  lcd.setFont(FONT_CN);
-  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
+  g.setFont(FONT_CN);
+  int labelW = q.label.length() ? g.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? g.textWidth(q.unit)  : 0;
   int priceW = pixNum5x7Width(pbuf, 2);
   int limit  = hasPct ? (224 - pctW - 8) : 224;
   int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
@@ -296,38 +296,61 @@ static void pixelQuoteRow(const QuoteData& q, int qy) {
     gap = constrain(avail / gaps, 3, 8);
   }
 
-  drawCoin(14, qy - 5);                          // 金币图标
+  drawCoin(g, 14, qy - 5);                          // 金币图标
   int x = 30;
-  lcd.setTextSize(1);
-  lcd.setTextDatum(middle_left);
+  g.setTextSize(1);
+  g.setTextDatum(middle_left);
   if (labelW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(WHITE, DEEP);
-    drawTextClamped(q.label.c_str(), x, qy, 72);
+    g.setFont(FONT_CN);
+    g.setTextColor(WHITE, DEEP);
+    drawTextClampedG(g, q.label.c_str(), x, qy, 72);
     x += labelW + gap;
   }
-  lcd.setFont(FONT_SM);                          // 价格：金币黄点阵
-  pixNum5x7(x, qy - 7, pbuf, 2, COIN);
+  g.setFont(FONT_SM);                          // 价格：金币黄点阵
+  pixNum5x7G(g, x, qy - 7, pbuf, 2, COIN);
   x += priceW + 6 + (unitW > 0 ? gap : 0);
   if (unitW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(DIM_L, DEEP);
-    drawTextClamped(q.unit.c_str(), x, qy, limit - x);
+    g.setFont(FONT_CN);
+    g.setTextColor(DIM_L, DEEP);
+    drawTextClampedG(g, q.unit.c_str(), x, qy, limit - x);
   }
   if (hasPct) {
-    pixNum5x7(224 - pctW, qy - 7, cbuf, 2, q.changePct > 0 ? UP : DOWN);
+    pixNum5x7G(g, 224 - pctW, qy - 7, cbuf, 2, q.changePct > 0 ? UP : DOWN);
   }
 }
 
-// 行情上滑动画帧：清除条带+上下过渡区，旧行上滑滑出、新行从下方滑升入位
+// 行情上滑动画帧：在离屏 Sprite 双缓冲里整帧画好再一次性 push，
+// 避免"先清带再写文字"造成的逐帧闪烁；结束后立即 deleteSprite 释放 RAM。
+static lgfx::LGFX_Sprite sQAnimSpr(&lcd);
+static const int QANIM_Y0 = Q_Y - QANIM_K - 8;
+static const int QANIM_H  = 2 * QANIM_K + 22;
+
 void pixelQuoteAnim(const UiData& d) {
-  if (!d.quote || !d.quote->ok) return;
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+  if (!d.quote || !d.quote->ok) {
+    if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+    return;
+  }
   const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
   int off = (int)(QANIM_K * p);
-  lcd.fillRect(10, Q_Y - QANIM_K - 2, 220, 2 * QANIM_K + 4, DEEP);
-  if (old && old->ok && off > 2) pixelQuoteRow(*old, Q_Y + off - QANIM_K);
-  pixelQuoteRow(*d.quote, Q_Y + off);
+
+  if (!(sQAnimSpr.getBuffer() != nullptr)) {
+    sQAnimSpr.setColorDepth(lgfx::color_depth_t::rgb565_2Byte);
+    if (!sQAnimSpr.createSprite(240, QANIM_H)) return;
+  }
+  lgfx::LGFXBase& g = sQAnimSpr;
+
+  sQAnimSpr.fillSprite(DEEP);                            // 行情条深底
+  if (old && old->ok && off > 2) pixelQuoteRow(g, *old, Q_Y + off - QANIM_K - QANIM_Y0);
+  pixelQuoteRow(g, *d.quote, Q_Y + off - QANIM_Y0);
+
+  sQAnimSpr.pushSprite(0, QANIM_Y0);
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+}
+
+void pixelQuoteRelease(void) {
+  if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
 }
 
 void pixelTick(const UiData& d, bool blinkColon) {
@@ -438,6 +461,6 @@ void pixelTick(const UiData& d, bool blinkColon) {
   if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管
     sQKey = qk;
     lcd.fillRect(10, 206, 220, 24, DEEP);          // 条内清底（保留白框）
-    if (qk) pixelQuoteRow(*d.quote, Q_Y);
+    if (qk) pixelQuoteRow(lcd, *d.quote, Q_Y);
   }
 }

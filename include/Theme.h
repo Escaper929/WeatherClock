@@ -66,6 +66,7 @@ const QuoteData* themeQuotePrev();                 // 过渡期间返回旧行�
 bool themeQuoteAnimActive();                        // 过渡进行中？
 float themeQuoteAnimProgress();                     // 0.0=已到位 … 1.0=刚开始(新行最靠下)
 void themeQuoteAnimTick(const UiData& d);           // 动画帧：驱动当前主题双向滚动重绘
+void themeQuoteAnimRelease();                       // 动画结束后强制释放离屏 Sprite，归还 RAM
 
 // 新行情单行滑入/滑出的位移（≈半条带高，主题可自行缩放/截断）；改动动画节奏时调整
 const int QANIM_K = 18;

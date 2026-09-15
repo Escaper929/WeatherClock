@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  theme_retro.cpp - Retro 主题：辐射终端 / Pip-Boy 磷光绿
 //
 //  定位：Fallout Pip-Boy 式绿色磷光 CRT 终端 + 电子管读数质感。
@@ -81,25 +81,25 @@ static void dblRule(int y) {
   lcd.fillRect(14, y + 2, 212, 1, PH_FAINT);
 }
 
-// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
-static void retroQuoteRow(const QuoteData& q, int qy) {
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用；g 为可注入目标）
+static void retroQuoteRow(lgfx::LGFXBase& g, const QuoteData& q, int qy) {
   char pbuf[24];
   snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
 
   bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
   char cbuf[16];
   int pctW = 0;
-  lcd.setFont(FONT_SMALL);
+  g.setFont(FONT_SMALL);
   if (hasPct) {
     snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
-    pctW = lcd.textWidth(cbuf);
+    pctW = g.textWidth(cbuf);
   }
 
-  lcd.setFont(FONT_CN);
-  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
-  lcd.setFont(FONT_PRICE);
-  int priceW = lcd.textWidth(pbuf);
+  g.setFont(FONT_CN);
+  int labelW = q.label.length() ? g.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? g.textWidth(q.unit)  : 0;
+  g.setFont(FONT_PRICE);
+  int priceW = g.textWidth(pbuf);
   int limit  = hasPct ? (CL_XR - pctW - 12) : CL_XR;
   int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
   int gap = 6;
@@ -109,42 +109,65 @@ static void retroQuoteRow(const QuoteData& q, int qy) {
   }
 
   int x = CL_X0 + 4;
-  lcd.setTextSize(1);
-  lcd.setTextDatum(middle_left);
+  g.setTextSize(1);
+  g.setTextDatum(middle_left);
   if (labelW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(PH_DIM, BG);
-    drawTextClamped(q.label.c_str(), x, qy, 72);
+    g.setFont(FONT_CN);
+    g.setTextColor(PH_DIM, BG);
+    drawTextClampedG(g, q.label.c_str(), x, qy, 72);
     x += labelW + gap;
   }
   // 电子管窗口：微光描边 + 高亮磷光数字（nixie 质感）
-  lcd.drawRect(x - 5, qy - 10, priceW + 10, 20, PH_FAINT);
-  lcd.setFont(FONT_PRICE);
-  lcd.setTextColor(PH_BRIGHT, BG);
-  lcd.drawString(pbuf, x, qy + 1);
+  g.drawRect(x - 5, qy - 10, priceW + 10, 20, PH_FAINT);
+  g.setFont(FONT_PRICE);
+  g.setTextColor(PH_BRIGHT, BG);
+  g.drawString(pbuf, x, qy + 1);
   x += priceW + 10 + (unitW > 0 ? gap : 0);
   if (unitW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(PH_DIM, BG);
-    drawTextClamped(q.unit.c_str(), x, qy, limit - x);
+    g.setFont(FONT_CN);
+    g.setTextColor(PH_DIM, BG);
+    drawTextClampedG(g, q.unit.c_str(), x, qy, limit - x);
   }
   if (hasPct) {
-    lcd.setFont(FONT_SMALL);
-    lcd.setTextDatum(middle_right);
-    lcd.setTextColor(q.changePct > 0 ? PH_BRIGHT : PH_DIM, BG);
-    lcd.drawString(cbuf, CL_XR, qy + 1);
+    g.setFont(FONT_SMALL);
+    g.setTextDatum(middle_right);
+    g.setTextColor(q.changePct > 0 ? PH_BRIGHT : PH_DIM, BG);
+    g.drawString(cbuf, CL_XR, qy + 1);
   }
 }
 
-// 行情上滑动画帧：清除行带+下方过渡区，再在抬高位置绘制
+// 行情上滑动画帧：在离屏 Sprite 双缓冲里整帧画好再一次性 push，
+// 避免"先清带再写文字"造成的逐帧闪烁；结束后立即 deleteSprite 释放 RAM。
+static lgfx::LGFX_Sprite sQAnimSpr(&lcd);
+static const int QANIM_Y0 = Q_Y - QANIM_K - 8;
+static const int QANIM_H  = 2 * QANIM_K + 22;
+
 void retroQuoteAnim(const UiData& d) {
-  if (!d.quote || !d.quote->ok) return;
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+  if (!d.quote || !d.quote->ok) {
+    if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+    return;
+  }
   const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
   int off = (int)(QANIM_K * p);
-  lcd.fillRect(CL_X0, Q_Y - QANIM_K - 4, CL_XR - CL_X0, 2 * QANIM_K + 10, BG);
-  if (old && old->ok && off > 2) retroQuoteRow(*old, Q_Y + off - QANIM_K);
-  retroQuoteRow(*d.quote, Q_Y + off);
+
+  if (!(sQAnimSpr.getBuffer() != nullptr)) {
+    sQAnimSpr.setColorDepth(lgfx::color_depth_t::rgb565_2Byte);
+    if (!sQAnimSpr.createSprite(240, QANIM_H)) return;
+  }
+  lgfx::LGFXBase& g = sQAnimSpr;
+
+  sQAnimSpr.fillSprite(BG);
+  if (old && old->ok && off > 2) retroQuoteRow(g, *old, Q_Y + off - QANIM_K - QANIM_Y0);
+  retroQuoteRow(g, *d.quote, Q_Y + off - QANIM_Y0);
+
+  sQAnimSpr.pushSprite(0, QANIM_Y0);
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+}
+
+void retroQuoteRelease(void) {
+  if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
 }
 
 void retroTick(const UiData& d, bool blinkColon) {
@@ -278,6 +301,6 @@ void retroTick(const UiData& d, bool blinkColon) {
   if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管
     sQKey = qk;
     lcd.fillRect(CL_X0, Q_Y - 12, 224, 25, BG);   // 190..214，不触碰底部边框
-    if (qk) retroQuoteRow(*d.quote, Q_Y);
+    if (qk) retroQuoteRow(lcd, *d.quote, Q_Y);
   }
 }

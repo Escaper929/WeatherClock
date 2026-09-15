@@ -20,6 +20,13 @@ void pixelQuoteAnim (const UiData& d);
 void wastelandQuoteAnim(const UiData& d);
 void marioQuoteAnim (const UiData& d);
 
+// 各主题行情带动画资源释放
+void modernQuoteRelease(void);
+void retroQuoteRelease (void);
+void pixelQuoteRelease (void);
+void wastelandQuoteRelease(void);
+void marioQuoteRelease (void);
+
 // ---- 行情上滑过渡状态机（双向滚动：旧上滑滑出、新从下方滑入） ----
 static bool            sQAnim   = false;     // 一次上滑进行中
 static uint32_t        sQAnimT0 = 0;
@@ -101,5 +108,16 @@ void themeQuoteAnimTick(const UiData& d) {
     case THEME_WASTELAND: wastelandQuoteAnim(d); break;
     case THEME_MARIO:     marioQuoteAnim(d);     break;
     default:              modernQuoteAnim(d);    break;
+  }
+}
+
+// 动画结束后由 main 调用：释放各主题的离屏行情带 Sprite，避免内存滞留
+void themeQuoteAnimRelease() {
+  switch (sTheme) {
+    case THEME_RETRO:     retroQuoteRelease();     break;
+    case THEME_PIXEL:     pixelQuoteRelease();     break;
+    case THEME_WASTELAND: wastelandQuoteRelease(); break;
+    case THEME_MARIO:     marioQuoteRelease();     break;
+    default:              modernQuoteRelease();    break;
   }
 }

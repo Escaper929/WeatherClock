@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  theme_mario.cpp - Mario 主题：马里奥配色平台游戏 HUD（高饱和版）
 //
 //  与 Classic Platformer（theme_pixel.cpp）同一布局骨架，按视觉层级用色：
@@ -125,13 +125,13 @@ static void drawSunAt(int cx, int cy) {
 }
 
 // 像素金币 10x10：Coin 黄 + Coin Orange 阴影 + Cloud 高光
-static void drawCoin(int x, int y) {
-  lcd.fillRect(x + 2, y, 6, 10, COIN);
-  lcd.fillRect(x, y + 2, 10, 6, COIN);
-  lcd.fillRect(x + 1, y + 1, 8, 8, COIN);
-  lcd.fillRect(x + 3, y + 2, 2, 6, CLOUD);
-  lcd.fillRect(x + 7, y + 3, 1, 4, COIN_D);
-  lcd.fillRect(x + 2, y + 7, 6, 1, COIN_D);
+static void drawCoin(lgfx::LGFXBase& g, int x, int y) {
+  g.fillRect(x + 2, y, 6, 10, COIN);
+  g.fillRect(x, y + 2, 10, 6, COIN);
+  g.fillRect(x + 1, y + 1, 8, 8, COIN);
+  g.fillRect(x + 3, y + 2, 2, 6, CLOUD);
+  g.fillRect(x + 7, y + 3, 1, 4, COIN_D);
+  g.fillRect(x + 2, y + 7, 6, 1, COIN_D);
 }
 
 // 经典砖块 16x10：Brick + Brick Dark 缝
@@ -253,24 +253,24 @@ static void drawHudText(const char* s, int x, int y) {
 }
 
 // 点阵数字 + Ink Brown 1px 描边（砖墙上的价格/涨跌）
-static void pixNumOutlined(int x, int y, const char* s, int cell, uint16_t color) {
+static void pixNumOutlined(lgfx::LGFXBase& g, int x, int y, const char* s, int cell, uint16_t color) {
   for (int dy = -1; dy <= 1; dy++)
     for (int dx = -1; dx <= 1; dx++)
-      if (dx || dy) pixNum5x7(x + dx, y + dy, s, cell, INK);
-  pixNum5x7(x, y, s, cell, color);
+      if (dx || dy) pixNum5x7G(g, x + dx, y + dy, s, cell, INK);
+  pixNum5x7G(g, x, y, s, cell, color);
 }
 
-// 行情砖墙条：Brick 砖 + Brick Dark 灰浆 + Cloud 外框
-static void drawBrickBar() {
-  lcd.fillRect(8, 204, 224, 28, BRICK_D);        // 灰浆底
+// 行情砖墙条：Brick 砖 + Brick Dark 灰浆 + Cloud 外框（可注入目标）
+static void drawBrickBar(lgfx::LGFXBase& g, int x, int y) {
+  g.fillRect(x, y, 224, 28, BRICK_D);        // 灰浆底
   for (int row = 0; row < 3; row++) {
-    int by = 205 + row * 9;
-    for (int bx = 9 + (row % 2) * 8; bx < 231; bx += 17) {
-      int bw = (bx + 16 <= 231) ? 16 : 231 - bx;
-      lcd.fillRect(bx, by, bw, 8, BRICK);
+    int by = y + 1 + row * 9;
+    for (int bx = x + 1 + (row % 2) * 8; bx < x + 223; bx += 17) {
+      int bw = (bx + 16 <= x + 223) ? 16 : (x + 223 - bx);
+      g.fillRect(bx, by, bw, 8, BRICK);
     }
   }
-  lcd.drawRect(8, 204, 224, 28, CLOUD);
+  g.drawRect(x, y, 224, 28, CLOUD);
 }
 
 static void drawChrome() {
@@ -282,7 +282,7 @@ static void drawChrome() {
   lcd.fillRect(CARD_X, CARD_Y, CARD_W, CARD_H, INK);
   lcd.fillRect(CARD_X + 3, CARD_Y + 3, CARD_W - 6, CARD_H - 6, DEEP);
   // 行情状态条：砖墙 + Cloud 外框
-  drawBrickBar();
+  drawBrickBar(lcd, 8, 204);
 }
 
 // 游戏计时数字：7x10 cell5 云朵白 + Ink Brown 2px 描边 + 暗红右下投影
@@ -304,23 +304,23 @@ static void drawClockDigits(int h, int m) {
   }
 }
 
-// 行情行内容绘制（y 为中线，供静态与上滑动效共用）
-static void marioQuoteRow(const QuoteData& q, int qy) {
+// 行情行内容绘制（y 为中线，供静态与上滑动效共用；g 为可注入目标）
+static void marioQuoteRow(lgfx::LGFXBase& g, const QuoteData& q, int qy) {
   char pbuf[24];
   snprintf(pbuf, sizeof pbuf, "%.*f", q.decimals, q.price);
 
   bool hasPct = (q.changePct > 0.005f || q.changePct < -0.005f);
   char cbuf[16];
   int pctW = 0;
-  lcd.setFont(FONT_SM);
+  g.setFont(FONT_SM);
   if (hasPct) {
     snprintf(cbuf, sizeof cbuf, "%+.2f%%", q.changePct);
     pctW = pixNum5x7Width(cbuf, 2);
   }
 
-  lcd.setFont(FONT_CN);
-  int labelW = q.label.length() ? lcd.textWidth(q.label) : 0;
-  int unitW  = q.unit.length()  ? lcd.textWidth(q.unit)  : 0;
+  g.setFont(FONT_CN);
+  int labelW = q.label.length() ? g.textWidth(q.label) : 0;
+  int unitW  = q.unit.length()  ? g.textWidth(q.unit)  : 0;
   int priceW = pixNum5x7Width(pbuf, 2);
   int limit  = hasPct ? (224 - pctW - 8) : 224;
   int gaps   = (labelW > 0 ? 1 : 0) + (unitW > 0 ? 1 : 0);
@@ -330,38 +330,62 @@ static void marioQuoteRow(const QuoteData& q, int qy) {
     gap = constrain(avail / gaps, 3, 8);
   }
 
-  drawCoin(14, qy - 5);                          // 金币图标
+  drawCoin(g, 14, qy - 5);                          // 金币图标
   int x = 30;
-  lcd.setTextSize(1);
-  lcd.setTextDatum(middle_left);
+  g.setTextSize(1);
+  g.setTextDatum(middle_left);
   if (labelW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(CLOUD);                     // 标签：米白（融进砖墙）
-    drawTextClamped(q.label.c_str(), x, qy, 72);
+    g.setFont(FONT_CN);
+    g.setTextColor(CLOUD);                     // 标签：米白（融进砖墙）
+    drawTextClampedG(g, q.label.c_str(), x, qy, 72);
     x += labelW + gap;
   }
-  lcd.setFont(FONT_SM);                          // 价格：Coin 黄 + Ink 描边
-  pixNumOutlined(x, qy - 7, pbuf, 2, COIN);
+  g.setFont(FONT_SM);                          // 价格：Coin 黄 + Ink 描边
+  pixNumOutlined(g, x, qy - 7, pbuf, 2, COIN);
   x += priceW + 6 + (unitW > 0 ? gap : 0);
   if (unitW > 0) {
-    lcd.setFont(FONT_CN);
-    lcd.setTextColor(CLOUD);                     // 单位：米白
-    drawTextClamped(q.unit.c_str(), x, qy, limit - x);
+    g.setFont(FONT_CN);
+    g.setTextColor(CLOUD);                     // 单位：米白
+    drawTextClampedG(g, q.unit.c_str(), x, qy, limit - x);
   }
   if (hasPct) {
-    pixNumOutlined(224 - pctW, qy - 7, cbuf, 2, q.changePct > 0 ? RED : GRASS);
+    pixNumOutlined(g, 224 - pctW, qy - 7, cbuf, 2, q.changePct > 0 ? RED : GRASS);
   }
 }
 
-// 行情上滑动画帧：重铺砖墙+清过渡区，再在抬高位置绘制
+// 行情上滑动画帧：在离屏 Sprite 双缓冲里整帧画好（砖墙底）再一次性 push，
+// 避免"先清带再写文字"造成的逐帧闪烁；结束后立即 deleteSprite 释放 RAM。
+static lgfx::LGFX_Sprite sQAnimSpr(&lcd);
+static const int QANIM_Y0 = Q_Y - QANIM_K - 8;
+static const int QANIM_H  = 2 * QANIM_K + 22;
+
 void marioQuoteAnim(const UiData& d) {
-  if (!d.quote || !d.quote->ok) return;
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+  if (!d.quote || !d.quote->ok) {
+    if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+    return;
+  }
   const QuoteData* old = themeQuotePrev();
   float p = themeQuoteAnimProgress();
   int off = (int)(QANIM_K * p);
-  drawBrickBar();                                  // 重铺砖墙，充当过渡区清除
-  if (old && old->ok && off > 2) marioQuoteRow(*old, Q_Y + off - QANIM_K);
-  marioQuoteRow(*d.quote, Q_Y + off);
+
+  if (!(sQAnimSpr.getBuffer() != nullptr)) {
+    sQAnimSpr.setColorDepth(lgfx::color_depth_t::rgb565_2Byte);
+    if (!sQAnimSpr.createSprite(240, QANIM_H)) return;
+  }
+  lgfx::LGFXBase& g = sQAnimSpr;
+
+  sQAnimSpr.fillSprite(BRICK_D);                          // 砖墙灰浆底
+  drawBrickBar(g, 8, 204 - QANIM_Y0);             // 重铺砖墙（相对 Sprite 顶）
+  if (old && old->ok && off > 2) marioQuoteRow(g, *old, Q_Y + off - QANIM_K - QANIM_Y0);
+  marioQuoteRow(g, *d.quote, Q_Y + off - QANIM_Y0);
+
+  sQAnimSpr.pushSprite(0, QANIM_Y0);
+  if (!themeQuoteAnimActive() && (sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
+}
+
+void marioQuoteRelease(void) {
+  if ((sQAnimSpr.getBuffer() != nullptr)) sQAnimSpr.deleteSprite();
 }
 
 void marioTick(const UiData& d, bool blinkColon) {
@@ -482,7 +506,7 @@ void marioTick(const UiData& d, bool blinkColon) {
   }
   if (qk != sQKey && !themeQuoteAnimActive()) {   // 动画过渡期内由动画帧接管
     sQKey = qk;
-    drawBrickBar();                                // 重铺砖墙 + Cloud 框
-    if (qk) marioQuoteRow(*d.quote, Q_Y);
+    drawBrickBar(lcd, 8, 204);                       // 重铺砖墙 + Cloud 框
+    if (qk) marioQuoteRow(lcd, *d.quote, Q_Y);
   }
 }

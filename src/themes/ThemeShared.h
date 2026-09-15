@@ -98,6 +98,8 @@ int  pixColon7x10(int ox, int oy, int cell, uint16_t col);                // 冒
 int  pixNum7x10Width(const char* s, int cell);
 int  pixNum5x7(int ox, int oy, const char* s, int cell, uint16_t col);    // 支持 0-9 . - + %
 int  pixNum5x7Width(const char* s, int cell);
+// 可注入目标对象的 G 变体（供离屏 Sprite 双缓冲使用），旧版内部转发
+int  pixNum5x7G(lgfx::LGFXBase& g, int ox, int oy, const char* s, int cell, uint16_t col);
 
 // ---------------------------------------------------------------------------
 // 小工具
@@ -105,5 +107,7 @@ int  pixNum5x7Width(const char* s, int cell);
 // 文字宽度钳制绘制：超过 maxW 时逐字截断尾部并补 '…'（防御超长城市/天气文字）
 // 使用当前字体与 textDatum；返回实际绘制宽度
 int drawTextClamped(const char* s, int x, int y, int maxW);
+// 可注入目标对象的 G 变体（供离屏 Sprite 双缓冲使用），旧版内部转发
+int drawTextClampedG(lgfx::LGFXBase& g, const char* s, int x, int y, int maxW);
 
 }  // namespace thm
