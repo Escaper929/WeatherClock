@@ -149,6 +149,29 @@
     </section>
 
     <section class="card">
+      <h2>换环境 / 切换 WiFi（配置都会保留）</h2>
+      <div class="tip">
+        <div class="lbl">Keep Config</div>
+        <p>设备若<b>送人 / 搬家换网络</b>，不用重新配置：只需要重连新 WiFi。</p>
+        <p>下面的按钮可再次连接设备，只更新 WiFi 账号密码，<b>已保存的天气 API Key、城市/地址、行情、主题全部保留</b>。</p>
+      </div>
+      <div class="actions">
+        <esp-web-install-button manifest="manifest.json">
+          <button slot="activate">连接设备 · 仅切换 WiFi</button>
+          <i slot="unsupported">当前浏览器不支持 WebSerial，请改用 Chrome / Edge 打开本页。</i>
+        </esp-web-install-button>
+        <p class="foot-note" style="margin-top:12px;margin-bottom:0">
+          接线方式：<b>USB 连电脑</b>后点击按钮 → 选择对应串口 → 在弹出的 WiFi 列表里选
+          <b>新环境的网络</b>并输密码即可。若设备正连着旧 WiFi，也会先进入配网等待界面。
+        </p>
+      </div>
+      <p class="foot-note" style="margin-top:12px;margin-bottom:0">
+        无电脑时的兜底：<b>按住 BOOT 键再上电</b>进入热点（WiFi <code>WeatherClock-xxxx</code>，
+        访问 <code>192.168.4.1</code>）切换 WiFi，同样保留全部配置。
+      </p>
+    </section>
+
+    <section class="card">
       <h2>配网后：补填天气</h2>
       <div class="tip">
         <div class="lbl">Config</div>
