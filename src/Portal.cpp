@@ -690,13 +690,24 @@ static String fwFetchLatest() {
   return "";
 }
 
+// 版本串形如 "xxxxxxx YYYY-MM-DD"（或 "local YYYY-MM-DD"）。
+// 完全相等=同版本；否则比较日期（YYYY-MM-DD 字符串序即日期序），
+// 仅当线上日期比当前新才提示更新，避免设备已是最新时被误报旧版。
+static bool fwHasNew(const String& latest) {
+  if (latest == String(FWV_STR)) return false;
+  String ld = latest.substring(latest.indexOf(' ') + 1); ld.trim();
+  String cd = String(FWV_STR); cd = cd.substring(cd.indexOf(' ') + 1); cd.trim();
+  if (ld.length() == 0 || cd.length() == 0) return true;
+  return ld > cd;   // "2026-09-15" 字符串比较即日期序
+}
+
 static void handleFwCheck(WebServer& server) {
   String latest = fwFetchLatest();
   if (latest.length() == 0) {
     server.send(200, "application/json", "{\"ok\":0,\"err\":\"无法连接固件镜像（已尝试 jsDelivr 与 GitHub Raw）\"}");
     return;
   }
-  bool hasnew = latest != FWV_STR;
+  bool hasnew = fwHasNew(latest);
   server.send(200, "application/json",
               String("{\"ok\":1,\"cur\":\"") + FWV_STR + "\",\"latest\":\"" + latest +
               "\",\"hasnew\":" + (hasnew ? "1" : "0") + "}");
