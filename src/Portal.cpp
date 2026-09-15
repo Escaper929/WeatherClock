@@ -131,61 +131,65 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(
 <!DOCTYPE html><html lang='zh'><head>
 <meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>天气时钟配置</title><style>
-:root{--bg:#0b0906;--card:rgba(34,26,18,.92);--in:#15100a;--line:#7a5528;--txt:#efe4c8;--dim:#a89a7c;--acc:#d6a85a;--acc2:#e8c47f;--blue:#3a6fd6;--danger:#a74632;--ok:#2f8f5b}
+:root{--bg:#000;--in:#0b0c0e;--line:#2a2d33;--txt:#eae4d8;--dim:#a2a49c;--dim3:#6e7076;--acc:#eae4d8;--acc2:#f2edde;--blue:#8fa7c8;--danger:#b0604a;--ok:#4a8a5f}
 *{box-sizing:border-box}
-body{font-family:ui-monospace,"Cascadia Code",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace;background:radial-gradient(1000px 520px at 50% -10%,rgba(214,168,90,.12),transparent 60%),linear-gradient(hsl(27,33%,6%),#070605) fixed;background-color:var(--bg);color:var(--txt);display:flex;justify-content:center;margin:0;padding:18px 14px}
+body{font-family:ui-monospace,"Cascadia Code",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace;background:radial-gradient(1200px 600px at 50% -12%,rgba(234,228,216,.05),transparent 60%),#000 fixed;background-color:var(--bg);color:var(--txt);display:flex;justify-content:center;margin:0;padding:18px 14px;-webkit-font-smoothing:antialiased}
 /* 左右双栏：左预览列（sticky 常驻，含固件更新）/ 右设置表单；窄屏回退单列 */
 .wrap{max-width:920px;width:100%;display:flex;gap:16px;align-items:flex-start}
 .colL{width:302px;flex:none;position:sticky;top:16px}
 .colR{flex:1;min-width:0}
 @media(max-width:760px){.wrap{flex-direction:column}.colL{width:100%;position:static}}
-.card{background:var(--card);border-radius:10px;padding:18px;margin-bottom:16px;border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(232,196,127,.06)}
-h1{font-size:17px;margin:0 0 2px;color:var(--acc);letter-spacing:.04em}small{color:var(--dim)}
-label{display:block;margin:12px 0 4px;font-size:12px;color:var(--dim);letter-spacing:.02em}
-input,select{width:100%;padding:9px;border-radius:6px;border:1px solid var(--line);background:var(--in);color:var(--txt);font-size:14px}
-input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px rgba(214,168,90,.16)}
-.btn{width:100%;margin-top:14px;padding:11px;border:0;border-radius:6px;background:var(--acc);color:#14100a;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.03em;transition:filter .15s ease,transform .05s ease}
-.btn:hover{filter:brightness(1.06)}
-.btn:active{transform:translateY(1px)}
-.btn2{background:var(--blue);color:#fff}
+.card{background:var(--in);border-radius:6px;padding:18px;margin-bottom:16px;border:1px solid var(--line)}
+h1{font-size:17px;margin:0 0 2px;color:var(--txt);letter-spacing:.03em;font-weight:500}small{color:var(--dim3)}
+label{display:block;margin:12px 0 4px;font-size:12px;color:var(--dim3);letter-spacing:.02em}
+input,select{width:100%;padding:9px;border-radius:4px;border:1px solid var(--line);background:var(--in);color:var(--txt);font-size:14px}
+input:focus,select:focus{outline:none;border-color:var(--dim)}
+.btn{width:100%;margin-top:14px;padding:11px;border:0;border-radius:4px;background:var(--txt);color:#000;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.02em;transition:filter .15s ease,transform .05s ease,opacity .15s ease}
+.btn:hover{filter:brightness(1.07)}
+.btn:active{transform:translateY(1px);opacity:.9}
+.btn2{background:transparent;border:1px solid var(--line);color:var(--dim)}
+.btn2:hover{border-color:var(--dim3);color:var(--txt)}
 .row{display:flex;gap:8px}.row>*{flex:1}
-/* 240x240 屏幕预览：与固件 UiTheme/Screen.cpp 同一套设计语言（1px=1px） */
-#scr{width:240px;height:240px;background:#0f1116;border-radius:10px;border:1px solid #2a2e36;margin:14px auto 0;position:relative;overflow:hidden}
+/* 240x240 屏幕预览：与固件 UiTheme/Modern 主题同一套设计语言（1px=1px） */
+#scr{width:240px;height:240px;background:#000;border-radius:6px;border:1px solid #25282e;margin:14px auto 0;position:relative;overflow:hidden}
 #scr .pdate{position:absolute;top:9px;left:24px;color:#a2a49c;font-size:11px;letter-spacing:1px;white-space:nowrap}
 #scr .pcity{position:absolute;top:9px;right:24px;color:#a2a49c;font-size:11px;white-space:nowrap}
-#scr .pclock{position:absolute;top:35px;left:0;width:100%;text-align:center;color:#eae4d8;font-size:42px;font-weight:700;font-family:Consolas,Menlo,monospace;letter-spacing:4px;font-variant-numeric:tabular-nums}
+#scr .pclock{position:absolute;top:35px;left:0;width:100%;text-align:center;color:#eae4d8;font-size:42px;font-weight:400;font-family:Consolas,Menlo,monospace;letter-spacing:4px;font-variant-numeric:tabular-nums}
 #scr .pfrule{position:absolute;top:208px;left:24px;right:24px;height:1px;background:#2c2f36}
 #scr .picon{position:absolute;left:36px;top:118px;width:40px;height:40px;line-height:40px;text-align:center;font-size:26px;opacity:.92}
 #scr .pwtext{position:absolute;left:24px;top:165px;width:64px;text-align:center;color:#a2a49c;font-size:11px}
-#scr .ptemp{position:absolute;right:21px;top:122px;color:#eae4d8;font-size:23px;font-weight:700;font-family:Consolas,Menlo,monospace;white-space:nowrap}
+#scr .ptemp{position:absolute;right:21px;top:122px;color:#eae4d8;font-size:23px;font-weight:400;font-family:Consolas,Menlo,monospace;white-space:nowrap}
 #scr .ptemp .pdeg{font-size:10px;font-weight:400;color:#a2a49c;margin-left:2px}
 #scr .pmeta{position:absolute;right:24px;top:165px;color:#6e7076;font-size:11px;white-space:nowrap;text-align:right}
 #scr .pqrow{position:absolute;top:218px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#6e7076;white-space:nowrap}
-#scr .pqrow .qp{color:#969da8;font-weight:700;margin:0 4px}
-#scr .pqrow .up{color:#c68670;font-weight:700}
-#scr .pqrow .dn{color:#749c94;font-weight:700}
+#scr .pqrow .qp{color:#969da8;font-weight:500;margin:0 4px}
+#scr .pqrow .up{color:#c08670;font-weight:500}
+#scr .pqrow .dn{color:#749c94;font-weight:500}
 /* 行情轮播列表 builder */
-.qrow{border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px;background:var(--in)}
+.qrow{border:1px solid var(--line);border-radius:4px;padding:8px;margin-top:8px;background:var(--in)}
 .qhead{display:flex;gap:6px;align-items:center}
 .qhead select{flex:1}
-.qdel{width:auto;flex:none;padding:7px 11px;border:0;border-radius:7px;background:#a74632;color:#fff;cursor:pointer;font-size:12px}
+.qdel{width:auto;flex:none;padding:7px 11px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--danger);cursor:pointer;font-size:12px}
+.qdel:hover{border-color:var(--danger)}
 .qcus{margin-top:6px}
 .qcus input{margin-top:6px}
-.qadd{margin-top:8px;background:var(--acc);color:#14100a}
-#res{display:none;margin-top:10px;font-size:12px;line-height:1.6;padding:10px;border-radius:8px;background:var(--in);border:1px solid var(--line);white-space:pre-wrap;color:var(--txt)}
+.qadd{margin-top:8px;background:transparent;border:1px solid var(--line);color:var(--dim)}
+.qadd:hover{border-color:var(--dim3);color:var(--txt)}
+#res{display:none;margin-top:10px;font-size:12px;line-height:1.6;padding:10px;border-radius:4px;background:var(--in);border:1px solid var(--line);white-space:pre-wrap;color:var(--txt)}
 #res.ok{border-color:var(--ok)}
-.tips{font-size:11px;color:var(--dim);margin-top:12px;line-height:1.6}
-details.hint{margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--in);padding:6px 10px;font-size:12px}
-details.hint summary{cursor:pointer;color:var(--acc);font-weight:600;user-select:none}
-details.hint .hintb{margin-top:8px;color:var(--dim);line-height:1.7;font-size:12px}
+.tips{font-size:11px;color:var(--dim3);margin-top:12px;line-height:1.6}
+details.hint{margin-top:10px;border:1px solid var(--line);border-radius:4px;background:var(--in);padding:6px 10px;font-size:12px}
+details.hint summary{cursor:pointer;color:var(--dim);font-weight:500;user-select:none}
+details.hint summary:hover{color:var(--txt)}
+details.hint .hintb{margin-top:8px;color:var(--dim3);line-height:1.7;font-size:12px}
 details.hint .hintb b{color:var(--txt)}
 /* 显示风格主题卡片 */
-.th{display:flex;align-items:center;gap:10px;padding:9px 11px;margin-top:6px;border:1px solid var(--line);border-radius:8px;background:var(--in);cursor:pointer}
-.th b{font-size:13px;min-width:58px}
-.th .d{font-size:11px;color:var(--dim);flex:1}
-.th.sel{border-color:var(--acc);background:#2a2114}
-.th.sel b{color:var(--acc2)}
-#thres{font-size:11px;color:var(--acc);margin-top:6px;min-height:14px}
+.th{display:flex;align-items:center;gap:10px;padding:9px 11px;margin-top:6px;border:1px solid var(--line);border-radius:4px;background:var(--in);cursor:pointer}
+.th b{font-size:13px;min-width:58px;color:var(--txt)}
+.th .d{font-size:11px;color:var(--dim3);flex:1}
+.th.sel{border-color:var(--dim);background:#131417}
+.th.sel b{color:var(--txt)}
+#thres{font-size:11px;color:var(--dim);margin-top:6px;min-height:14px}
 /* Classic Platformer 预览皮肤（t=2 时启用，与固件 theme_pixel.cpp 同一设计语言） */
 #scr.plat{background:#5c94fc;border-radius:0}
 #scr .phud{display:none}
@@ -256,7 +260,7 @@ details.hint .hintb b{color:var(--txt)}
 #scr.wasteland .pqrow .up,#scr.wasteland .pqrow .dn{color:#a9682a}
 </style></head><body><div class='wrap'>
 <div class='colL'><div class='card'>
-<h1>☀ WeatherClock</h1><small>$IP$</small>
+<h1>WeatherClock</h1><small>$IP$</small>
 <label>屏幕预览（当前浏览器本地时间，保存后设备按所选时区显示）</label>
 <div id='scr'>
   <div class='phud'></div>
