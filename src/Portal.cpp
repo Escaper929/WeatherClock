@@ -691,15 +691,15 @@ static String fwFetchLatest() {
   return "";
 }
 
-// 版本串形如 "xxxxxxx YYYY-MM-DD"（或 "local YYYY-MM-DD"）。
-// 完全相等=同版本；否则比较日期（YYYY-MM-DD 字符串序即日期序），
-// 仅当线上日期比当前新才提示更新，避免设备已是最新时被误报旧版。
+// 版本串形如 "xxxxxxx YYYY-MM-DDTHH:MM"（Git 提交时间，分钟级，兼容旧的 "xxxxxxx YYYY-MM-DD"）。
+// 完全相等=同版本；否则比较提交时间串（ISO 格式字符串序即时间序），
+// 支持同一天多次发布：只要线上提交时间比当前新就提示更新，不会误报降级。
 static bool fwHasNew(const String& latest) {
   if (latest == String(FWV_STR)) return false;
   String ld = latest.substring(latest.indexOf(' ') + 1); ld.trim();
   String cd = String(FWV_STR); cd = cd.substring(cd.indexOf(' ') + 1); cd.trim();
   if (ld.length() == 0 || cd.length() == 0) return true;
-  return ld > cd;   // "2026-09-15" 字符串比较即日期序
+  return ld > cd;   // "2026-09-15T08:30" 字符串比较即时间序
 }
 
 static void handleFwCheck(WebServer& server) {
