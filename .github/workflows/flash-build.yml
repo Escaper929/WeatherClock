@@ -63,7 +63,9 @@ jobs:
           fi
           echo "$FW_VER" > web/version.txt
 
-      # 把固件 bin 提交回仓库，jsDelivr 镜像才能代理到（国内访问稳定）
+      # 把固件 bin 提交回仓库，jsDelivr 镜像才能代理到（国内访问稳定）。
+      # 之后把承载本次固件的 bin commit SHA 写入 web/bin_sha.txt 一并提交，
+      # 供设备 OTA 下载定位固件（与 version.txt 的源码 SHA 解耦，避免拉到旧 bin）。
       - name: Commit firmware binaries to repo
         id: bins
         run: |
@@ -72,13 +74,23 @@ jobs:
           git add web/firmware.bin web/bootloader.bin web/partitions.bin web/boot_app0.bin web/version.txt
           if git diff --cached --quiet; then
             echo "No firmware changes to commit"
-            echo "bin_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            BIN_SHA=$(git rev-parse HEAD)
           else
             git commit -m "chore: update firmware binaries [skip ci]"
+            BIN_SHA=$(git rev-parse HEAD)
             git push
-            echo "bin_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
             echo "Pushed firmware binaries for jsDelivr mirror"
           fi
+          echo "Recording bin sha $BIN_SHA"
+          echo "$BIN_SHA" > web/bin_sha.txt
+          git add web/bin_sha.txt
+          if git diff --cached --quiet; then
+            echo "bin_sha.txt unchanged"
+          else
+            git commit -m "chore: record firmware bin sha [skip ci]"
+            git push
+          fi
+          echo "bin_sha=$BIN_SHA" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: build

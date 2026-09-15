@@ -674,19 +674,18 @@ static bool fwHttpBegin(WiFiClientSecure& cl, HTTPClient& http, const String& ur
   return http.begin(cl, url);
 }
 
-// 拉取 web/version.txt（短SHA 日期），依次尝试各镜像，失败返回空串。
-// 关键：版本比对必须拿到「最新值」。jsDelivr @main 是可变引用，CDN 可能返回旧缓存，
-// 一旦命中也无法判断新旧，会误报已是最新；故优先用 GitHub Raw（直连 git、无 CDN 缓存），
-// 只有它连不通时才回退到 4 个 jsDelivr 节点作国内兜底。（固件下载不受此影响：那是 SHA
-// pin 的不可变 URL，即便有 CDN 缓存也是同一份文件。）
-static String fwFetchLatest() {
+// 拉取仓库 web/ 子目录下的文件，依次尝试各镜像，失败返回空串。
+// 关键：这些文件必须拿到「最新版」。jsDelivr @main 是可变引用，CDN 可能返回旧缓存，
+// 一旦命中也无法判断新旧，会误判；故优先用 GitHub Raw（直连 git、无 CDN 缓存），
+// 只有它连不通时才回退到 4 个 jsDelivr 节点作国内兜底。
+static String fwFetchWebFile(const char* name) {
   // 尝试顺序：先 GitHub Raw，再 jsDelivr 4 节点（镜像 base 索引 4 = raw）
   static const int ORDER[FW_BASES_N] = {4, 0, 1, 2, 3};
   for (int k = 0; k < FW_BASES_N; k++) {
     int i = ORDER[k];
     WiFiClientSecure cl;
     HTTPClient http;
-    String url = fwBaseUrl(i, "main") + "/web/version.txt?t=" + millis();
+    String url = fwBaseUrl(i, "main") + String("/web/") + name + "?t=" + millis();
     String out;
     if (fwHttpBegin(cl, http, url) && http.GET() == 200) {
       out = http.getString();
@@ -697,6 +696,12 @@ static String fwFetchLatest() {
   }
   return "";
 }
+
+// 最新版本标识：短SHA + 提交时间（与刷入固件的 FwVersion 一致，用于版本比对）
+static String fwFetchLatest()   { return fwFetchWebFile("version.txt"); }
+// 承载本次固件的 bin 提交 SHA（CI 写入）。固件文件存在该 SHA 对应的镜像 URL 下，
+// 与 version.txt 的「源码 SHA」解耦：比对走源码标识，下载走 bin 定位，避免拉到旧固件。
+static String fwFetchBinSha()   { return fwFetchWebFile("bin_sha.txt"); }
 
 // 版本串形如 "xxxxxxx YYYY-MM-DDTHH:MM"（Git 提交时间，分钟级，兼容旧的 "xxxxxxx YYYY-MM-DD"）。
 // 完全相等=同版本；否则比较提交时间串（ISO 格式字符串序即时间序），
@@ -721,15 +726,16 @@ static void handleFwCheck(WebServer& server) {
               "\",\"hasnew\":" + (hasnew ? "1" : "0") + "}");
 }
 
-// 后台下载任务：读 Content-Length 定长流式写入 OTA 分区，完成后 4s 重启
+// 后台下载任务：读 Content-Length 定长流式写入 OTA 分区，完成后 4s 重启。
+// 下载用 bin_sha.txt 里的 bin 提交 SHA 定位固件（不可变 URL，且该提交正好承载本次构建固件，
+// 不会像 version.txt 的源码 SHA 那样命中旧 bin）。
 static void fwTask(void*) {
   gFwState = FW_DL; gFwPct = 0; gFwErr = "";
-  String latest = fwFetchLatest();
-  String sha = latest; int sp = sha.indexOf(' ');
-  if (sp > 0) sha.remove(sp);
+  String sha = fwFetchBinSha();
+  sha.trim();
   bool ok = false;
-  if (sha.length() != 7) {
-    gFwErr = "版本号获取失败";
+  if (sha.length() < 7) {
+    gFwErr = "固件版本信息获取失败";
   } else {
     // 依次尝试各镜像下载固件（定长流式写 OTA 分区）
     for (int i = 0; i < FW_BASES_N && !ok; i++) {
