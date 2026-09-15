@@ -654,7 +654,16 @@ static const char FW_REPO[] = "Escaper929/WeatherClock";
 enum { FW_IDLE = 0, FW_DL = 1, FW_OK = 2, FW_FAIL = 3 };
 static volatile int     gFwState = FW_IDLE;
 static volatile int     gFwPct   = 0;
-static String gFwErr;
+// 更新错误信息：用定长 char 缓冲而非 String，避免 OTA 任务与 WebServer 任务跨任务
+// 并发读写 String（赋值会重分配堆，无同步下是未定义行为，可能崩溃）。
+static char gFwErr[64];
+
+static void fwErrSet(const char* m) {
+  int n = 0;
+  while (m && m[n] && n < (int)sizeof(gFwErr) - 1) { gFwErr[n] = m[n]; n++; }
+  gFwErr[n] = 0;
+}
+static bool fwErrEmpty() { return gFwErr[0] == 0; }
 
 // 镜像 base：jsDelivr 用 @ref，GitHub RAW 用 /ref；尾部统一拼 /web/xxx
 static String fwBaseUrl(int i, const String& ref) {
@@ -703,14 +712,35 @@ static String fwFetchLatest()   { return fwFetchWebFile("version.txt"); }
 // 与 version.txt 的「源码 SHA」解耦：比对走源码标识，下载走 bin 定位，避免拉到旧固件。
 static String fwFetchBinSha()   { return fwFetchWebFile("bin_sha.txt"); }
 
+// 校验提交时间串是否为 "YYYY-MM-DD"（旧式）或 "YYYY-MM-DDTHH:MM"（带分钟），
+// 非法（乱码/空/缺空格等）返回 false，避免畸形 version.txt 引发误判。
+static bool fwValidTime(const String& t) {
+  int len = t.length();
+  if (len != 10 && len != 16) return false;
+  for (int i = 0; i < len; i++) {
+    char c = t[i];
+    if (c == '-' || c == ':' || c == 'T') continue;   // 分隔符
+    if (c < '0' || c > '9') return false;             // 其余必须是数字
+  }
+  if (len == 10) return t[4] == '-' && t[7] == '-';
+  return t[4] == '-' && t[7] == '-' && t[10] == 'T' && t[13] == ':';
+}
+
 // 版本串形如 "xxxxxxx YYYY-MM-DDTHH:MM"（Git 提交时间，分钟级，兼容旧的 "xxxxxxx YYYY-MM-DD"）。
 // 完全相等=同版本；否则比较提交时间串（ISO 格式字符串序即时间序），
 // 支持同一天多次发布：只要线上提交时间比当前新就提示更新，不会误报降级。
 static bool fwHasNew(const String& latest) {
   if (latest == String(FWV_STR)) return false;
-  String ld = latest.substring(latest.indexOf(' ') + 1); ld.trim();
-  String cd = String(FWV_STR); cd = cd.substring(cd.indexOf(' ') + 1); cd.trim();
-  if (ld.length() == 0 || cd.length() == 0) return true;
+  String ld;
+  int sp = latest.indexOf(' ');
+  if (sp > 0) ld = latest.substring(sp + 1);
+  ld.trim();
+  String cd = String(FWV_STR);
+  int csp = cd.indexOf(' ');
+  if (csp > 0) cd = cd.substring(csp + 1);
+  cd.trim();
+  // 任一侧时间串非法/缺失（常见于异常或旧版畸形 version.txt）→ 保守按「有更新」处理
+  if (!fwValidTime(ld) || !fwValidTime(cd)) return true;
   return ld > cd;   // "2026-09-15T08:30" 字符串比较即时间序
 }
 
@@ -730,12 +760,12 @@ static void handleFwCheck(WebServer& server) {
 // 下载用 bin_sha.txt 里的 bin 提交 SHA 定位固件（不可变 URL，且该提交正好承载本次构建固件，
 // 不会像 version.txt 的源码 SHA 那样命中旧 bin）。
 static void fwTask(void*) {
-  gFwState = FW_DL; gFwPct = 0; gFwErr = "";
+  gFwState = FW_DL; gFwPct = 0; gFwErr[0] = 0;
   String sha = fwFetchBinSha();
   sha.trim();
   bool ok = false;
   if (sha.length() < 7) {
-    gFwErr = "固件版本信息获取失败";
+    fwErrSet("固件版本信息获取失败");
   } else {
     // 依次尝试各镜像下载固件（定长流式写 OTA 分区）
     for (int i = 0; i < FW_BASES_N && !ok; i++) {
@@ -747,12 +777,12 @@ static void fwTask(void*) {
       }
       int len = http.getSize();
       if (len <= 0) {
-        gFwErr = "固件大小未知";
+        fwErrSet("固件大小未知");
         http.end();
         continue;
       }
       if (!Update.begin(len, U_FLASH)) {
-        gFwErr = Update.errorString();
+        fwErrSet(Update.errorString());
         http.end();
         continue;
       }
@@ -761,13 +791,13 @@ static void fwTask(void*) {
       int got = 0;
       while (got < len) {
         int n = s->readBytes(buf, (size_t)min(len - got, (int)sizeof(buf)));
-        if (n <= 0) { gFwErr = "下载中断"; break; }
-        if (Update.write(buf, n) != (size_t)n) { gFwErr = "写入失败"; break; }
+        if (n <= 0) { fwErrSet("下载中断"); break; }
+        if (Update.write(buf, n) != (size_t)n) { fwErrSet("写入失败"); break; }
         got += n;
         gFwPct = got * 100 / len;
       }
       if (got >= len && Update.end(true)) ok = true;   // true = 校验并设为启动分区
-      else if (gFwErr.length() == 0) gFwErr = Update.errorString();
+      else if (fwErrEmpty()) fwErrSet(Update.errorString());
       http.end();
       if (!ok) Update.abort();   // 该镜像下载未成功，重置 OTA 状态再试下一个
     }
