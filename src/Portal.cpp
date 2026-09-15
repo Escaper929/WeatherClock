@@ -647,12 +647,25 @@ static void handleSave(WebServer& server, AppConfig& cfg) {
 
 // 注册路由（两种模式共用）；ipText 按值传入并捕获，避免悬垂引用
 // ---- 在线固件更新：版本比对走 /api/fwcheck，下载由后台任务执行，进度轮询 /api/fwstatus ----
-// bin 源用 version.txt 里的短 SHA pin 住 jsDelivr URL（immutable，不受 CDN 缓存影响）
+// 源用 version.txt 里的短 SHA pin 住 URL（immutable，不受 CDN 缓存影响）。
+// jsDelivr 主节点(cdn)在某些网络连不通，故提供多个镜像自动兜底，全部失败才报错。
 static const char FW_REPO[] = "Escaper929/WeatherClock";
 enum { FW_IDLE = 0, FW_DL = 1, FW_OK = 2, FW_FAIL = 3 };
 static volatile int     gFwState = FW_IDLE;
 static volatile int     gFwPct   = 0;
 static String gFwErr;
+
+// 镜像 base：jsDelivr 用 @ref，GitHub RAW 用 /ref；尾部统一拼 /web/xxx
+static String fwBaseUrl(int i, const String& ref) {
+  switch (i) {
+    case 0: return String("https://cdn.jsdelivr.net/gh/") + FW_REPO + "@" + ref;
+    case 1: return String("https://fastly.jsdelivr.net/gh/") + FW_REPO + "@" + ref;
+    case 2: return String("https://gcore.jsdelivr.net/gh/") + FW_REPO + "@" + ref;
+    case 3: return String("https://testingcf.jsdelivr.net/gh/") + FW_REPO + "@" + ref;
+    default: return String("https://raw.githubusercontent.com/") + FW_REPO + "/" + ref;
+  }
+}
+static const int FW_BASES_N = 5;   // 4 个 jsDelivr 节点 + GitHub RAW
 
 static bool fwHttpBegin(WiFiClientSecure& cl, HTTPClient& http, const String& url) {
   cl.setInsecure();               // 与 Weather.cpp 同策略：不校验证书，省 flash/RAM
@@ -660,24 +673,27 @@ static bool fwHttpBegin(WiFiClientSecure& cl, HTTPClient& http, const String& ur
   return http.begin(cl, url);
 }
 
-// 拉取 web/version.txt（短SHA 日期），失败返回空串
+// 拉取 web/version.txt（短SHA 日期），依次尝试各镜像，失败返回空串
 static String fwFetchLatest() {
-  WiFiClientSecure cl;
-  HTTPClient http;
-  String url = String("https://cdn.jsdelivr.net/gh/") + FW_REPO + "@main/web/version.txt?t=" + millis();
-  String out;
-  if (fwHttpBegin(cl, http, url) && http.GET() == 200) {
-    out = http.getString();
-    out.trim();
+  for (int i = 0; i < FW_BASES_N; i++) {
+    WiFiClientSecure cl;
+    HTTPClient http;
+    String url = fwBaseUrl(i, "main") + "/web/version.txt?t=" + millis();
+    String out;
+    if (fwHttpBegin(cl, http, url) && http.GET() == 200) {
+      out = http.getString();
+      out.trim();
+    }
+    http.end();
+    if (out.length() > 0) return out;
   }
-  http.end();
-  return out;
+  return "";
 }
 
 static void handleFwCheck(WebServer& server) {
   String latest = fwFetchLatest();
   if (latest.length() == 0) {
-    server.send(200, "application/json", "{\"ok\":0,\"err\":\"无法连接 jsDelivr 镜像\"}");
+    server.send(200, "application/json", "{\"ok\":0,\"err\":\"无法连接固件镜像（已尝试 jsDelivr 与 GitHub Raw）\"}");
     return;
   }
   bool hasnew = latest != FWV_STR;
@@ -689,22 +705,32 @@ static void handleFwCheck(WebServer& server) {
 // 后台下载任务：读 Content-Length 定长流式写入 OTA 分区，完成后 4s 重启
 static void fwTask(void*) {
   gFwState = FW_DL; gFwPct = 0; gFwErr = "";
-  WiFiClientSecure cl;
-  HTTPClient http;
   String latest = fwFetchLatest();
   String sha = latest; int sp = sha.indexOf(' ');
   if (sp > 0) sha.remove(sp);
   bool ok = false;
   if (sha.length() != 7) {
     gFwErr = "版本号获取失败";
-  } else if (fwHttpBegin(cl, http, String("https://cdn.jsdelivr.net/gh/") + FW_REPO + "@" + sha + "/web/firmware.bin") &&
-             http.GET() == 200) {
-    int len = http.getSize();
-    if (len <= 0) {
-      gFwErr = "固件大小未知";
-    } else if (!Update.begin(len, U_FLASH)) {
-      gFwErr = Update.errorString();
-    } else {
+  } else {
+    // 依次尝试各镜像下载固件（定长流式写 OTA 分区）
+    for (int i = 0; i < FW_BASES_N && !ok; i++) {
+      WiFiClientSecure cl;
+      HTTPClient http;
+      if (!fwHttpBegin(cl, http, fwBaseUrl(i, sha) + "/web/firmware.bin") || http.GET() != 200) {
+        http.end();
+        continue;   // 该镜像连不通/非 200，换下一个
+      }
+      int len = http.getSize();
+      if (len <= 0) {
+        gFwErr = "固件大小未知";
+        http.end();
+        continue;
+      }
+      if (!Update.begin(len, U_FLASH)) {
+        gFwErr = Update.errorString();
+        http.end();
+        continue;
+      }
       Stream* s = http.getStreamPtr();
       uint8_t buf[1024];
       int got = 0;
@@ -717,11 +743,10 @@ static void fwTask(void*) {
       }
       if (got >= len && Update.end(true)) ok = true;   // true = 校验并设为启动分区
       else if (gFwErr.length() == 0) gFwErr = Update.errorString();
+      http.end();
+      if (!ok) Update.abort();   // 该镜像下载未成功，重置 OTA 状态再试下一个
     }
-  } else if (gFwErr.length() == 0) {
-    gFwErr = "固件下载失败";
   }
-  http.end();
   if (ok) {
     gFwState = FW_OK;
     vTaskDelay(pdMS_TO_TICKS(4000));   // 让浏览器轮询到完成状态
