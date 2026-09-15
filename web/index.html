@@ -8,128 +8,120 @@
   <style>
     :root {
       color-scheme: dark;
-      /* Modern 主题设计语言：黑底暖白，极简克制（与设备屏 Modern 盔同一套） */
-      --ink:    #000000;   /* 主底：纯黑 */
-      --panel:  #0c0d0f;   /* 面板：比纯黑略抬一档 */
-      --txt:    #eae4d8;   /* 一级文字：暖白 */
-      --dim:    #a2a49c;   /* 二级文字：暖浅灰 */
-      --dim3:   #6e7076;   /* 三级文字：中性灰 */
-      --line:   #2a2d33;   /* 发丝分隔线 / 细边框 */
-      --warn:   #b0604a;   /* 弱化的警示（低饱和暖红，克制用色） */
-      --okline: #4a8a5f;   /* 弱化成功 */
+      /* 深色 + 主信息彩色化：暖金=标题/序号/关键值，蓝=交互链接，正文近白高对比 */
+      --bg:      #0d1014;
+      --card:    #171a20;
+      --muted:   #1e232b;
+      --input:   #0e1116;
+      --line:    #2b313c;
+      --text:    #eef0f3;   /* 正文：近白，高对比 */
+      --sub:     #c6ccd6;   /* 次级正文：浅色，避免死灰 */
+      --faint:   #98a2b1;   /* 仅作极次要元信息底色 */
+      --accent:  #f4b860;   /* 主信息强调：标题/序号/关键值（暖金） */
+      --link:    #5b9bff;   /* 交互：链接/焦点（蓝） */
+      --warn:    #e07863;
+      --btn:     #f0f2f5;   /* 主按钮：浅底深字 */
+      --btn-fg:  #111418;
+      --code-bg: #1e232b;
+      --code-bor:#343b47;
+      --tip-bg:  rgba(244,184,96,.10);
     }
     * { box-sizing: border-box; }
     body {
-      font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas,
-                   "PingFang SC", "Microsoft YaHei", monospace;
-      margin: 0; padding: 30px 16px;
-      /* 极淡暖白顶光，黑底上几乎不可见，营造安静质感而非强调 */
-      background:
-        radial-gradient(1200px 480px at 50% -10%, rgba(234,228,216,.05), transparent 60%),
-        #000;
-      color: var(--txt); min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "PingFang SC", "Microsoft YaHei", sans-serif;
+      margin: 0; padding: 32px 16px;
+      background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 560px; margin: 0 auto; }
+    .wrap { max-width: 600px; margin: 0 auto; }
 
-    header { margin: 0 0 22px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+    header { margin: 0 0 20px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
     .ledger {
       display: flex; justify-content: space-between; align-items: baseline;
-      color: var(--dim3); font-size: 11px; letter-spacing: .2em; margin-bottom: 12px;
-      text-transform: uppercase;
+      color: var(--accent); font-size: 12px; letter-spacing: .08em; margin-bottom: 14px;
+      text-transform: uppercase; font-weight: 600;
     }
-    .ledger .pulse { color: var(--dim); }
-    h1 {
-      margin: 0; font-size: 24px; letter-spacing: .02em; font-weight: 500;
-      color: var(--txt); font-variant-numeric: tabular-nums;
-    }
-    h1 .accent { color: var(--dim); font-weight: 400; }
-    h1 .cursor {
-      display:inline-block; width:.55em; height:1.05em; transform: translateY(.18em);
-      margin-left: .12em; background: var(--txt); animation: blink 1.2s steps(1) infinite;
-    }
-    @keyframes blink { 50% { opacity: 0; } }
-    .sub { color: var(--dim3); margin: 8px 0 0; font-size: 13px; letter-spacing: .02em; }
+    .ledger .pulse { color: var(--link); }
+    h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.01em; color: var(--text); }
+    h1 .accent { color: var(--accent); font-weight: 500; }
+    h1 .accent::before { content: "·"; margin: 0 4px; color: var(--sub); }
+    .sub { color: var(--sub); margin: 6px 0 0; font-size: 14px; }
 
     section.card {
-      background: transparent; border: 0; padding: 0 0 22px; margin-bottom: 22px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 22px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.4);
     }
-    section.card + section.card { border-top: 1px solid var(--line); padding-top: 22px; }
     .card h2 {
-      margin: 0 0 12px; font-size: 12px; font-weight: 500; letter-spacing: .22em;
-      color: var(--dim); text-transform: uppercase;
+      margin: 0 0 14px; font-size: 12px; font-weight: 650; letter-spacing: .06em;
+      color: var(--accent); text-transform: uppercase;
     }
-    .card h2::before { content: "·"; margin-right: 8px; color: var(--dim3); font-size: 14px; }
 
     ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
     ol.steps li {
-      counter-increment: s; position: relative; padding: 10px 0 10px 30px; line-height: 1.65;
-      color: var(--txt); font-size: 13.5px;
-      border-bottom: 1px solid var(--line); opacity: 0;
-      animation: rise .5s ease forwards;
+      counter-increment: s; position: relative; padding: 11px 0 11px 34px;
+      line-height: 1.65; font-size: 14px; color: var(--text);
+      border-bottom: 1px solid var(--line);
     }
-    @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-    ol.steps li:nth-child(1){animation-delay:.02s}
-    ol.steps li:nth-child(2){animation-delay:.08s}
-    ol.steps li:nth-child(3){animation-delay:.14s}
-    ol.steps li:nth-child(4){animation-delay:.20s}
-    ol.steps li:nth-child(5){animation-delay:.26s}
-    ol.steps li:last-child { border-bottom: var(--line) 1px solid; }
+    ol.steps li:last-child { border-bottom: 0; }
     ol.steps li::before {
-      content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 11px;
-      color: var(--dim3); font-size: 11px; letter-spacing: .05em; font-variant-numeric: tabular-nums;
+      content: counter(s); position: absolute; left: 0; top: 12px;
+      width: 22px; height: 22px; line-height: 22px; text-align: center;
+      background: var(--muted); color: var(--accent); border-radius: 50%;
+      font-size: 12px; font-weight: 700;
     }
-    ol.steps b { color: var(--txt); font-weight: 600; }
+    ol.steps b { font-weight: 650; }
     code {
-      background: #0a0b0d; padding: 1px 6px; border-radius: 3px;
-      border: 1px solid var(--line); color: var(--txt); font-size: .95em;
+      background: var(--code-bg); border: 1px solid var(--code-bor); border-radius: 5px;
+      padding: 1px 6px; color: var(--accent); font-size: .92em;
+      font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
     }
 
-    .actions { padding-top: 16px; }
+    .actions { padding-top: 10px; }
     esp-web-install-button { display: block; }
     esp-web-install-button button[slot="activate"] {
-      display: inline-block; width: 100%; padding: 13px 18px; font: inherit; cursor: pointer;
-      color: #000; background: var(--txt);
-      border: 1px solid var(--txt); border-radius: 3px;
-      font-size: 14.5px; font-weight: 600; letter-spacing: .02em;
-      transition: transform .06s ease, filter .15s ease, opacity .15s ease;
+      display: inline-block; width: 100%; padding: 14px; font: 600 15px/1.2 inherit; cursor: pointer;
+      color: var(--btn-fg); background: var(--btn); border: 1px solid var(--btn); border-radius: 8px;
+      transition: filter .12s ease, transform .05s ease;
     }
     esp-web-install-button button[slot="activate"]:hover { filter: brightness(1.08); }
-    esp-web-install-button button[slot="activate"]:active { transform: translateY(1px); opacity: .9; }
+    esp-web-install-button button[slot="activate"]:active { transform: translateY(1px); }
     esp-web-install-button i[slot="unsupported"] {
-      display: block; margin-top: 10px; font-style: normal; color: var(--warn); font-size: 12.5px;
+      display: block; margin-top: 12px; font-style: normal; color: var(--warn); font-size: 13px;
     }
-    .alt {
-      margin-top: 12px; text-align: center;
-    }
+    .alt { margin-top: 12px; text-align: center; }
     .alt esp-web-install-button button[slot="activate"] {
-      width: auto; padding: 8px 14px; font-size: 12.5px; color: var(--dim);
-      background: transparent; border: 1px solid var(--line);
-      letter-spacing: .04em; font-weight: 400;
+      width: auto; padding: 8px 14px; font-size: 13px; color: var(--link);
+      background: transparent; border: 1px solid var(--line); font-weight: 500;
     }
-    .alt esp-web-install-button button[slot="activate"]:hover { color: var(--txt); border-color: var(--dim3); }
+    .alt esp-web-install-button button[slot="activate"]:hover { color: var(--text); border-color: var(--link); }
 
-    .meta { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--dim3); }
-    .meta b { color: var(--txt); font-weight: 500; }
+    .meta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--sub); }
+    .meta b { color: var(--accent); font-weight: 650; }
 
-    .tip { border-left: 1px solid var(--dim3); padding: 2px 0 2px 16px; }
-    .tip p, .tip div { font-size: 13px; color: var(--txt); line-height: 1.75; margin-bottom: 4px; }
-    .tip .lbl { color: var(--dim3); letter-spacing: .2em; font-size: 11px; margin-bottom: 6px; text-transform: uppercase; }
-    .foot-note { font-size: 12.5px; color: var(--dim3); line-height: 1.8; }
-    .foot-note a { color: var(--dim); }
-    .foot-note b { color: var(--txt); font-weight: 500; }
+    .tip { border-left: 3px solid var(--accent); background: var(--tip-bg); border-radius: 6px; padding: 12px 14px; }
+    .tip p, .tip div { font-size: 14px; color: var(--text); line-height: 1.75; margin-bottom: 4px; }
+    .tip .lbl {
+      color: var(--accent); letter-spacing: .06em; font-size: 11px; margin-bottom: 8px;
+      text-transform: uppercase; font-weight: 650;
+    }
+    .foot-note { font-size: 13px; color: var(--sub); line-height: 1.8; }
+    .foot-note a { color: var(--link); text-decoration: none; }
+    .foot-note a:hover { text-decoration: underline; }
+    .foot-note b { color: var(--text); font-weight: 650; }
 
     @media (max-width: 420px) {
       body { padding: 22px 12px; }
-      h1 { font-size: 21px; }
+      h1 { font-size: 22px; }
+      section.card { padding: 18px; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <div class="ledger"><span>WeatherClock Station</span><span class="pulse">● USB FLASH</span></div>
-      <h1>一键刷固件 <span class="accent">· WebSerial</span><span class="cursor"></span></h1>
+      <div class="ledger"><span>WeatherClock Station</span><span class="pulse">USB FLASH</span></div>
+      <h1>一键刷固件<span class="accent">WebSerial</span></h1>
       <p class="sub">ESP32-C3 Super Mini + 1.54″ ST7789　浏览器直刷，无需任何驱动</p>
     </header>
 
@@ -143,8 +135,6 @@
         <li>填入你家 WiFi 与密码，设备联网后浏览器会<b>自动打开配置页</b>。</li>
       </ol>
       <div class="actions">
-        <!-- manifest 同源加载（页面能开就能下）；固件 bin 走 jsDelivr（国内稳定）。
-             备用按钮：jsDelivr 不可达时，bin 也从本页同源（GitHub Pages）下载。 -->
         <esp-web-install-button manifest="manifest.json">
           <button slot="activate">连接并烧录 WeatherClock</button>
           <i slot="unsupported">当前浏览器不支持 WebSerial，请改用 Chrome / Edge 打开本页。</i>

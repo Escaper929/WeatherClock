@@ -131,25 +131,25 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(
 <!DOCTYPE html><html lang='zh'><head>
 <meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>天气时钟配置</title><style>
-:root{--bg:#000;--in:#0b0c0e;--line:#2a2d33;--txt:#eae4d8;--dim:#a2a49c;--dim3:#6e7076;--acc:#eae4d8;--acc2:#f2edde;--blue:#8fa7c8;--danger:#b0604a;--ok:#4a8a5f}
+:root{--bg:#0d1014;--surface:#171a20;--muted:#1e232b;--input:#0e1116;--line:#2b313c;--txt:#eef0f3;--sub:#c6ccd6;--faint:#98a2b1;--acc:#f4b860;--acc2:#fff;--link:#5b9bff;--danger:#e07863;--ok:#4ac583;--btn:#f0f2f5;--btn-fg:#111418}
 *{box-sizing:border-box}
-body{font-family:ui-monospace,"Cascadia Code",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace;background:radial-gradient(1200px 600px at 50% -12%,rgba(234,228,216,.05),transparent 60%),#000 fixed;background-color:var(--bg);color:var(--txt);display:flex;justify-content:center;margin:0;padding:18px 14px;-webkit-font-smoothing:antialiased}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);background-color:var(--bg);color:var(--txt);display:flex;justify-content:center;margin:0;padding:22px 16px;line-height:1.6;-webkit-font-smoothing:antialiased}
 /* 左右双栏：左预览列（sticky 常驻，含固件更新）/ 右设置表单；窄屏回退单列 */
-.wrap{max-width:920px;width:100%;display:flex;gap:16px;align-items:flex-start}
+.wrap{max-width:960px;width:100%;display:flex;gap:16px;align-items:flex-start}
 .colL{width:302px;flex:none;position:sticky;top:16px}
 .colR{flex:1;min-width:0}
 @media(max-width:760px){.wrap{flex-direction:column}.colL{width:100%;position:static}}
-.card{background:var(--in);border-radius:6px;padding:18px;margin-bottom:16px;border:1px solid var(--line)}
-h1{font-size:17px;margin:0 0 2px;color:var(--txt);letter-spacing:.03em;font-weight:500}small{color:var(--dim3)}
-label{display:block;margin:12px 0 4px;font-size:12px;color:var(--dim3);letter-spacing:.02em}
-input,select{width:100%;padding:9px;border-radius:4px;border:1px solid var(--line);background:var(--in);color:var(--txt);font-size:14px}
-input:focus,select:focus{outline:none;border-color:var(--dim)}
-.btn{width:100%;margin-top:14px;padding:11px;border:0;border-radius:4px;background:var(--txt);color:#000;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.02em;transition:filter .15s ease,transform .05s ease,opacity .15s ease}
-.btn:hover{filter:brightness(1.07)}
-.btn:active{transform:translateY(1px);opacity:.9}
-.btn2{background:transparent;border:1px solid var(--line);color:var(--dim)}
-.btn2:hover{border-color:var(--dim3);color:var(--txt)}
-.row{display:flex;gap:8px}.row>*{flex:1}
+.card{background:var(--surface);border-radius:10px;padding:20px;margin-bottom:14px;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+h1{font-size:18px;margin:0 0 2px;color:var(--acc);font-weight:650;letter-spacing:-.01em}small{color:var(--faint)}
+label{display:block;margin:14px 0 5px;font-size:13px;color:var(--txt);font-weight:550}
+input,select{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:var(--input);color:var(--txt);font-size:14px;transition:border-color .12s ease,box-shadow .12s ease}
+input:focus,select:focus{outline:none;border-color:var(--link);box-shadow:0 0 0 3px rgba(91,155,255,.22)}
+.btn{width:100%;margin-top:18px;padding:11px;border:0;border-radius:8px;background:var(--btn);color:var(--btn-fg);font-size:14px;font-weight:650;cursor:pointer;letter-spacing:.01em;transition:filter .12s ease,transform .05s ease}
+.btn:hover{filter:brightness(1.06)}
+.btn:active{transform:translateY(1px)}
+.btn2{background:transparent;color:var(--txt);border:1px solid var(--line)}
+.btn2:hover{border-color:var(--faint);filter:none}
+.row{display:flex;gap:10px}.row>*{flex:1}
 /* 240x240 屏幕预览：与固件 UiTheme/Modern 主题同一套设计语言（1px=1px） */
 #scr{width:240px;height:240px;background:#000;border-radius:6px;border:1px solid #25282e;margin:14px auto 0;position:relative;overflow:hidden}
 #scr .pdate{position:absolute;top:9px;left:24px;color:#a2a49c;font-size:11px;letter-spacing:1px;white-space:nowrap}
@@ -166,30 +166,30 @@ input:focus,select:focus{outline:none;border-color:var(--dim)}
 #scr .pqrow .up{color:#c08670;font-weight:500}
 #scr .pqrow .dn{color:#749c94;font-weight:500}
 /* 行情轮播列表 builder */
-.qrow{border:1px solid var(--line);border-radius:4px;padding:8px;margin-top:8px;background:var(--in)}
-.qhead{display:flex;gap:6px;align-items:center}
+.qrow{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;background:var(--muted)}
+.qhead{display:flex;gap:8px;align-items:center}
 .qhead select{flex:1}
-.qdel{width:auto;flex:none;padding:7px 11px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--danger);cursor:pointer;font-size:12px}
+.qdel{width:auto;flex:none;padding:7px 12px;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--danger);cursor:pointer;font-size:12px;font-weight:550}
 .qdel:hover{border-color:var(--danger)}
 .qcus{margin-top:6px}
 .qcus input{margin-top:6px}
-.qadd{margin-top:8px;background:transparent;border:1px solid var(--line);color:var(--dim)}
-.qadd:hover{border-color:var(--dim3);color:var(--txt)}
-#res{display:none;margin-top:10px;font-size:12px;line-height:1.6;padding:10px;border-radius:4px;background:var(--in);border:1px solid var(--line);white-space:pre-wrap;color:var(--txt)}
+.qadd{margin-top:8px;background:transparent;border:1px dashed var(--line);color:var(--link)}
+.qadd:hover{border-color:var(--link)}
+#res{display:none;margin-top:12px;font-size:13px;line-height:1.7;padding:12px;border-radius:8px;background:var(--muted);border:1px solid var(--line);white-space:pre-wrap;color:var(--txt)}
 #res.ok{border-color:var(--ok)}
-.tips{font-size:11px;color:var(--dim3);margin-top:12px;line-height:1.6}
-details.hint{margin-top:10px;border:1px solid var(--line);border-radius:4px;background:var(--in);padding:6px 10px;font-size:12px}
-details.hint summary{cursor:pointer;color:var(--dim);font-weight:500;user-select:none}
-details.hint summary:hover{color:var(--txt)}
-details.hint .hintb{margin-top:8px;color:var(--dim3);line-height:1.7;font-size:12px}
+.tips{font-size:12px;color:var(--faint);margin-top:12px;line-height:1.7}
+details.hint{margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--muted);padding:8px 12px;font-size:13px}
+details.hint summary{cursor:pointer;color:var(--link);font-weight:550;user-select:none}
+details.hint summary:hover{color:#7aa4f3}
+details.hint .hintb{margin-top:8px;color:var(--sub);line-height:1.7;font-size:13px}
 details.hint .hintb b{color:var(--txt)}
 /* 显示风格主题卡片 */
-.th{display:flex;align-items:center;gap:10px;padding:9px 11px;margin-top:6px;border:1px solid var(--line);border-radius:4px;background:var(--in);cursor:pointer}
-.th b{font-size:13px;min-width:58px;color:var(--txt)}
-.th .d{font-size:11px;color:var(--dim3);flex:1}
-.th.sel{border-color:var(--dim);background:#131417}
-.th.sel b{color:var(--txt)}
-#thres{font-size:11px;color:var(--dim);margin-top:6px;min-height:14px}
+.th{display:flex;align-items:center;gap:12px;padding:10px 12px;margin-top:6px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer}
+.th b{font-size:13.5px;min-width:62px;color:var(--txt)}
+.th .d{font-size:12px;color:var(--faint);flex:1}
+.th.sel{border-color:var(--acc);background:rgba(244,184,96,.10);box-shadow:0 0 0 1px var(--acc)}
+.th.sel b{color:var(--acc)}
+#thres{font-size:12px;color:var(--acc);margin-top:6px;min-height:14px}
 /* Classic Platformer 预览皮肤（t=2 时启用，与固件 theme_pixel.cpp 同一设计语言） */
 #scr.plat{background:#5c94fc;border-radius:0}
 #scr .phud{display:none}
@@ -286,7 +286,7 @@ details.hint .hintb b{color:var(--txt)}
 <div><button class='btn' type='button' onclick='otaCheck()'>检查更新</button></div>
 <div><button class='btn btn2' type='button' id='otadl' style='display:none' onclick='otaFlash()'>下载并刷机</button></div>
 </div>
-<div id='ota' style='margin-top:8px;font-size:12px;color:var(--dim)'></div>
+<div id='ota' style='margin-top:8px;font-size:12px;color:var(--sub)'></div>
 <div class='tips'>在线更新自动从 GitHub（jsDelivr 镜像，国内可达）拉取最新固件，写入后自动重启，全程无需数据线；期间保持供电与网络。</div>
 <label style='margin-top:10px'>手动刷本地 bin（备用）</label>
 <input type='file' id='otafile' accept='.bin'>
