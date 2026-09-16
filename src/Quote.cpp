@@ -94,7 +94,7 @@ bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out) {
   String host, path, label, unit;
   bool jdGold   = (slot.type == 1);                          // 金价走京东金融·浙商积存金
   bool emPreset = (slot.type == 2 || slot.type == 4);        // 布油/沪铜仍走东财
-  bool emCopper = (slot.type == 4);                          // 沪铜最新价走东财K线端点
+  bool emKline  = (slot.type == 2 || slot.type == 4);        // 布油/沪铜：实时接口不可靠，统一走东财K线端点
 
   if (jdGold) {
     host  = JD_HOST;
@@ -103,8 +103,8 @@ bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out) {
     unit  = PRESETS[1].unit;
   } else if (emPreset) {
     const Preset& p = PRESETS[slot.type];  // 数组边界：有效预设仅 1/2/4
-    if (emCopper) {
-      // 沪铜：东财实时 stock/get 接口会清空 f43，改用 K 线端点取当日收盘
+    if (emKline) {
+      // 布油/沪铜：东财实时 stock/get 会清空 f43，统一改用 K 线端点取当日收盘
       host = EMHIS_HOST;
       // klt=101 日K，lmt=2 取今昨两根：fields2 f51日期 f52开 f53收 f54高 f55低
       path = String("/api/qt/stock/kline/get?secid=") + p.secid +
@@ -151,7 +151,7 @@ bool fetchQuote(const AppConfig& cfg, int index, QuoteData& out) {
     out.price     = atof(datas["price"]          | "0");
     out.changePct = pctStrToFloat(datas["upAndDownRate"] | "");
     out.decimals  = 2;
-  } else if (emCopper) {
+  } else if (emKline) {
     // 东财K线：data.klines 各元素 "日期,开,收,高,低"；取末根=今收、前根=昨收
     JsonArray kl = doc["data"]["klines"].as<JsonArray>();
     if (kl.size() < 2) {
