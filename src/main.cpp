@@ -62,8 +62,12 @@ static void fetchQuoteSafe() {
   quoteSlotN = quoteSlotCount(cfg);
   for (int i = 0; i < quoteSlotN; i++) {   // 批量拉取本次轮播的所有行情
     QuoteData q;
-    quoteValid[i] = fetchQuote(cfg, i, q);
-    if (quoteValid[i]) quotes[i] = q;
+    if (fetchQuote(cfg, i, q)) {
+      quotes[i] = q;
+      quoteValid[i] = true;
+    }
+    // 拉取失败（东财接口从设备侧偶发连不通）：保留上次成功的数据继续参与轮播，
+    // 避免配置好的槽位因瞬时网络问题从屏幕消失、轮播序列残缺（表现为"布油看不到/间隔变短"）
   }
   if (quoteShowIdx >= quoteSlotN) quoteShowIdx = quoteSlotN > 0 ? quoteSlotN - 1 : 0;
   lastQuote = millis();
